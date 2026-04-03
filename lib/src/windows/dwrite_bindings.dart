@@ -159,7 +159,7 @@ Pointer<NativeFunction<T>> vtableSlot<T extends Function>(
     'vtable slot $slotIndex is out of expected range',
   );
   final vtable = _vtable(comPtr);
-  final fnAddr = vtable.elementAt(slotIndex).value;
+  final fnAddr = (vtable + slotIndex).value;
   return Pointer<NativeFunction<T>>.fromAddress(fnAddr);
 }
 
@@ -295,8 +295,7 @@ int fontListGetFont(
   int index,
   Pointer<Pointer<IntPtr>> outFont,
 ) {
-  final fn =
-      vtableSlot<_GetFontNative>(fontList, 5).asFunction<_GetFontDart>();
+  final fn = vtableSlot<_GetFontNative>(fontList, 5).asFunction<_GetFontDart>();
   return fn(fontList, index, outFont);
 }
 
@@ -347,8 +346,7 @@ typedef _GetWeightNative = Int32 Function(Pointer<IntPtr> self);
 typedef _GetWeightDart = int Function(Pointer<IntPtr> self);
 
 int fontGetWeight(Pointer<IntPtr> font) {
-  final fn =
-      vtableSlot<_GetWeightNative>(font, 4).asFunction<_GetWeightDart>();
+  final fn = vtableSlot<_GetWeightNative>(font, 4).asFunction<_GetWeightDart>();
   return fn(font);
 }
 
@@ -440,7 +438,7 @@ int localizedStringsGetString(
   Pointer<Utf16> buffer,
   int size,
 ) {
-  final fn = vtableSlot<_GetStringNative>(strings, 8)
-      .asFunction<_GetStringDart>();
+  final fn =
+      vtableSlot<_GetStringNative>(strings, 8).asFunction<_GetStringDart>();
   return fn(strings, index, buffer, size);
 }

@@ -126,10 +126,7 @@ class _FontFamilyTile extends StatelessWidget {
         runSpacing: 4,
         children: family.weights.map((w) {
           return Chip(
-            label: Text(
-              '$w',
-              style: const TextStyle(fontSize: 11),
-            ),
+            label: Text('$w', style: const TextStyle(fontSize: 11)),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,

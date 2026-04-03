@@ -97,8 +97,7 @@ List<FontFamily> _scanCollection(
     }
   }
 
-  families
-      .sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  families.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   return families;
 }
 
