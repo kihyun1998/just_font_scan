@@ -4,6 +4,8 @@ import 'models.dart';
 import 'windows/windows_font_scanner.dart' as windows;
 
 class JustFontScan {
+  /// Cache is isolate-local. Calling [scan] from different isolates will
+  /// trigger separate scans.
   static List<FontFamily>? _cache;
 
   /// Scans system font families. Results are sorted by name.
@@ -18,8 +20,11 @@ class JustFontScan {
     _cache = null;
   }
 
-  /// Returns supported weights for [familyName].
-  /// Returns `[400]` if the family is not found.
+  /// Returns the supported weights for [familyName], case-insensitively.
+  ///
+  /// Returns `[400]` as a default when the family is not found in the
+  /// system font collection. To distinguish "found with weight 400" from
+  /// "not found", use [scan] directly and search the result.
   static List<int> weightsFor(String familyName) {
     final families = scan();
     final lowerName = familyName.toLowerCase();
@@ -35,7 +40,7 @@ class JustFontScan {
     if (Platform.isWindows) {
       return windows.scanFonts();
     }
-    // Future: Platform.isMacOS → macos.scanFonts()
+    // TODO(just_font_scan): Add macOS support using CoreText API.
     return const [];
   }
 }

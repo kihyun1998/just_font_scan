@@ -1,12 +1,34 @@
 // ignore_for_file: non_constant_identifier_names, constant_identifier_names
+// COM/DirectWrite bindings follow Windows SDK naming conventions:
+// types use PascalCase (GUID, HRESULT) and constants use ALL_CAPS
+// (DWRITE_FACTORY_TYPE_SHARED), which conflict with Dart lint rules.
 
 import 'dart:ffi';
+import 'dart:io' show Platform;
 
 import 'package:ffi/ffi.dart';
 
 // --- HRESULT helper ---
 
 bool succeeded(int hr) => hr >= 0;
+
+// --- Font weight range (DWRITE_FONT_WEIGHT) ---
+
+/// Minimum valid DWRITE_FONT_WEIGHT value.
+const int kDWriteFontWeightMin = 1;
+
+/// Maximum valid DWRITE_FONT_WEIGHT value (DWRITE_FONT_WEIGHT_ULTRA_BLACK = 950,
+/// but values up to 1000 are accepted by some implementations).
+const int kDWriteFontWeightMax = 1000;
+
+/// Maximum sane font name length in characters.
+const int kMaxFontNameLength = 32767;
+
+/// Maximum sane font family count (guard against corrupt COM data).
+const int kMaxFontFamilyCount = 10000;
+
+/// Maximum sane font count per family.
+const int kMaxFontCount = 1000;
 
 // --- GUIDs ---
 
@@ -63,7 +85,11 @@ const int DWRITE_FACTORY_TYPE_SHARED = 0;
 ///   DWRITE_FACTORY_TYPE factoryType,
 ///   REFIID iid,
 ///   IUnknown **factory
-/// );
+/// )
+///
+/// Note: `Pointer<IntPtr>` is the Dart FFI idiom for an opaque COM interface
+/// pointer. The actual native type is `IUnknown*`, but Dart FFI does not have
+/// a COM-aware type, so we use IntPtr-width pointers throughout.
 typedef DWriteCreateFactoryNative = Int32 Function(
   Int32 factoryType,
   Pointer<GUID> iid,
@@ -75,7 +101,7 @@ typedef DWriteCreateFactoryDart = int Function(
   Pointer<Pointer<IntPtr>> factory,
 );
 
-// --- CoInitializeEx ---
+// --- COM lifecycle (ole32.dll) ---
 
 typedef CoInitializeExNative = Int32 Function(
   Pointer<Void> reserved,
@@ -86,16 +112,40 @@ typedef CoInitializeExDart = int Function(
   int dwCoInit,
 );
 
+typedef CoUninitializeNative = Void Function();
+typedef CoUninitializeDart = void Function();
+
 /// COINIT_APARTMENTTHREADED = 0x2
 const int COINIT_APARTMENTTHREADED = 0x2;
+
+// --- DLL loading with absolute System32 path (W-1: prevent DLL hijacking) ---
+
+String _system32Path() {
+  final systemRoot = Platform.environment['SystemRoot'] ?? r'C:\Windows';
+  return '$systemRoot\\System32';
+}
+
+DynamicLibrary loadOle32() =>
+    DynamicLibrary.open('${_system32Path()}\\ole32.dll');
+
+DynamicLibrary loadDWrite() =>
+    DynamicLibrary.open('${_system32Path()}\\dwrite.dll');
 
 // --- COM vtable helpers ---
 
 /// Reads the vtable pointer array from a COM interface pointer.
+///
 /// comPtr points to the object, whose first field is a pointer to the vtable.
+/// Throws [StateError] if the COM pointer or vtable pointer is null, preventing
+/// an unrecoverable process crash from null-pointer dereference.
 Pointer<IntPtr> _vtable(Pointer<IntPtr> comPtr) {
-  // *comPtr = vtable pointer
+  if (comPtr.address == 0) {
+    throw StateError('COM pointer is null — cannot read vtable');
+  }
   final vtableAddr = comPtr.value;
+  if (vtableAddr == 0) {
+    throw StateError('vtable pointer is null');
+  }
   return Pointer<IntPtr>.fromAddress(vtableAddr);
 }
 
@@ -104,6 +154,10 @@ Pointer<NativeFunction<T>> vtableSlot<T extends Function>(
   Pointer<IntPtr> comPtr,
   int slotIndex,
 ) {
+  assert(
+    slotIndex >= 0 && slotIndex < 64,
+    'vtable slot $slotIndex is out of expected range',
+  );
   final vtable = _vtable(comPtr);
   final fnAddr = vtable.elementAt(slotIndex).value;
   return Pointer<NativeFunction<T>>.fromAddress(fnAddr);
@@ -111,16 +165,18 @@ Pointer<NativeFunction<T>> vtableSlot<T extends Function>(
 
 // --- IUnknown ---
 
-/// IUnknown::Release (slot 2)
+/// IUnknown::Release — vtable slot 2
 typedef _ReleaseNative = Uint32 Function(Pointer<IntPtr> self);
 typedef _ReleaseDart = int Function(Pointer<IntPtr> self);
 
-int comRelease(Pointer<IntPtr> comPtr) {
+void comRelease(Pointer<IntPtr> comPtr) {
+  if (comPtr.address == 0) return;
   final fn = vtableSlot<_ReleaseNative>(comPtr, 2).asFunction<_ReleaseDart>();
-  return fn(comPtr);
+  fn(comPtr);
 }
 
 // --- IDWriteFactory vtable ---
+// Verified against dwrite.h (Windows SDK) and MSDN.
 // IUnknown (3) + IDWriteFactory methods:
 //  [3]  GetSystemFontCollection
 //  [4]  CreateCustomFontCollection
@@ -144,10 +200,7 @@ int comRelease(Pointer<IntPtr> comPtr) {
 //  [22] CreateNumberSubstitution
 //  [23] CreateGlyphRunAnalysis
 
-/// IDWriteFactory::GetSystemFontCollection(
-///   IDWriteFontCollection** fontCollection,
-///   BOOL checkForUpdates
-/// )
+/// IDWriteFactory::GetSystemFontCollection — vtable slot 3
 typedef _GetSystemFontCollectionNative = Int32 Function(
   Pointer<IntPtr> self,
   Pointer<Pointer<IntPtr>> fontCollection,
@@ -169,12 +222,14 @@ int factoryGetSystemFontCollection(
 }
 
 // --- IDWriteFontCollection vtable ---
+// Verified against dwrite.h.
 // IUnknown (3) +
 //  [3] GetFontFamilyCount
 //  [4] GetFontFamily
 //  [5] FindFamilyName
 //  [6] GetFontFromFontFace
 
+/// IDWriteFontCollection::GetFontFamilyCount — vtable slot 3
 typedef _GetFontFamilyCountNative = Uint32 Function(Pointer<IntPtr> self);
 typedef _GetFontFamilyCountDart = int Function(Pointer<IntPtr> self);
 
@@ -184,7 +239,7 @@ int collectionGetFontFamilyCount(Pointer<IntPtr> collection) {
   return fn(collection);
 }
 
-/// IDWriteFontCollection::GetFontFamily(UINT32 index, IDWriteFontFamily** fontFamily)
+/// IDWriteFontCollection::GetFontFamily — vtable slot 4
 typedef _GetFontFamilyNative = Int32 Function(
   Pointer<IntPtr> self,
   Uint32 index,
@@ -207,11 +262,13 @@ int collectionGetFontFamily(
 }
 
 // --- IDWriteFontList vtable ---
+// Verified against dwrite.h.
 // IUnknown (3) +
 //  [3] GetFontCollection
 //  [4] GetFontCount
 //  [5] GetFont
 
+/// IDWriteFontList::GetFontCount — vtable slot 4
 typedef _GetFontCountNative = Uint32 Function(Pointer<IntPtr> self);
 typedef _GetFontCountDart = int Function(Pointer<IntPtr> self);
 
@@ -221,7 +278,7 @@ int fontListGetFontCount(Pointer<IntPtr> fontList) {
   return fn(fontList);
 }
 
-/// IDWriteFontList::GetFont(UINT32 index, IDWriteFont** font)
+/// IDWriteFontList::GetFont — vtable slot 5
 typedef _GetFontNative = Int32 Function(
   Pointer<IntPtr> self,
   Uint32 index,
@@ -244,10 +301,13 @@ int fontListGetFont(
 }
 
 // --- IDWriteFontFamily vtable (extends IDWriteFontList) ---
+// Verified against dwrite.h.
 // IDWriteFontList (6) +
 //  [6] GetFamilyNames
+//  [7] GetFirstMatchingFont
+//  [8] GetMatchingFonts
 
-/// IDWriteFontFamily::GetFamilyNames(IDWriteLocalizedStrings** names)
+/// IDWriteFontFamily::GetFamilyNames — vtable slot 6
 typedef _GetFamilyNamesNative = Int32 Function(
   Pointer<IntPtr> self,
   Pointer<Pointer<IntPtr>> names,
@@ -267,9 +327,11 @@ int fontFamilyGetFamilyNames(
 }
 
 // --- IDWriteFont vtable ---
+// Verified against dwrite.h (IDWriteFont : IUnknown).
+// Ref: https://learn.microsoft.com/en-us/windows/win32/api/dwrite/nn-dwrite-idwritefont
 // IUnknown (3) +
 //  [3]  GetFontFamily
-//  [4]  GetWeight         ← this is what we need
+//  [4]  GetWeight         — DWRITE_FONT_WEIGHT GetWeight()
 //  [5]  GetStretch
 //  [6]  GetStyle
 //  [7]  IsSymbolFont
@@ -280,6 +342,7 @@ int fontFamilyGetFamilyNames(
 //  [12] HasCharacter
 //  [13] CreateFontFace
 
+/// IDWriteFont::GetWeight — vtable slot 4
 typedef _GetWeightNative = Int32 Function(Pointer<IntPtr> self);
 typedef _GetWeightDart = int Function(Pointer<IntPtr> self);
 
@@ -290,6 +353,8 @@ int fontGetWeight(Pointer<IntPtr> font) {
 }
 
 // --- IDWriteLocalizedStrings vtable ---
+// Verified against dwrite.h.
+// Ref: https://learn.microsoft.com/en-us/windows/win32/api/dwrite/nn-dwrite-idwritelocalizedstrings
 // IUnknown (3) +
 //  [3] GetCount
 //  [4] FindLocaleName
@@ -298,6 +363,7 @@ int fontGetWeight(Pointer<IntPtr> font) {
 //  [7] GetStringLength
 //  [8] GetString
 
+/// IDWriteLocalizedStrings::GetCount — vtable slot 3
 typedef _GetCountNative = Uint32 Function(Pointer<IntPtr> self);
 typedef _GetCountDart = int Function(Pointer<IntPtr> self);
 
@@ -307,7 +373,7 @@ int localizedStringsGetCount(Pointer<IntPtr> strings) {
   return fn(strings);
 }
 
-/// FindLocaleName(const WCHAR* localeName, UINT32* index, BOOL* exists)
+/// IDWriteLocalizedStrings::FindLocaleName — vtable slot 4
 typedef _FindLocaleNameNative = Int32 Function(
   Pointer<IntPtr> self,
   Pointer<Utf16> localeName,
@@ -332,7 +398,7 @@ int localizedStringsFindLocaleName(
   return fn(strings, localeName, outIndex, outExists);
 }
 
-/// GetStringLength(UINT32 index, UINT32* length)
+/// IDWriteLocalizedStrings::GetStringLength — vtable slot 7
 typedef _GetStringLengthNative = Int32 Function(
   Pointer<IntPtr> self,
   Uint32 index,
@@ -354,7 +420,7 @@ int localizedStringsGetStringLength(
   return fn(strings, index, outLength);
 }
 
-/// GetString(UINT32 index, WCHAR* stringBuffer, UINT32 size)
+/// IDWriteLocalizedStrings::GetString — vtable slot 8
 typedef _GetStringNative = Int32 Function(
   Pointer<IntPtr> self,
   Uint32 index,
