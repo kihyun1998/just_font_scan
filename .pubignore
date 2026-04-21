@@ -1,0 +1,6 @@
+# Diagnostic / developer tooling that shouldn't ship on pub.dev.
+tool/
+
+# Internal planning docs (not user-facing API documentation).
+ROADMAP.md
+ROADMAP_MACOS.md

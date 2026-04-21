@@ -1,12 +1,13 @@
 import 'dart:io' show Platform;
 
+import 'macos/macos_font_scanner.dart' as macos;
 import 'models.dart';
 import 'windows/windows_font_scanner.dart' as windows;
 
 /// Provides static methods to scan system font families and query their
 /// supported weights.
 ///
-/// Currently supports Windows (DirectWrite). macOS support is planned.
+/// Supports Windows (DirectWrite) and macOS (CoreText).
 ///
 /// Results are cached after the first [scan] call. Use [clearCache] to
 /// force a rescan.
@@ -48,7 +49,9 @@ class JustFontScan {
     if (Platform.isWindows) {
       return windows.scanFonts();
     }
-    // TODO(just_font_scan): Add macOS support using CoreText API.
+    if (Platform.isMacOS) {
+      return macos.scanFonts();
+    }
     return const [];
   }
 }

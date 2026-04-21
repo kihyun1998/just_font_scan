@@ -3,14 +3,14 @@
 Dart package to scan system font families and their supported weights using platform-native APIs.
 
 - **Windows**: DirectWrite COM API (`dwrite.dll`) via `dart:ffi`
-- **macOS**: planned (CoreText)
+- **macOS**: CoreText framework via `dart:ffi`
 
 ## Features
 
 - Retrieves all system font families grouped by the platform's native family grouping (e.g. "Source Code Pro" is one family with weights 200--900, not separate entries per variant)
-- Reports supported font weights (100--950) per family
-- Results cached after first scan
-- No native build step -- pure `dart:ffi` with system DLLs
+- Reports supported font weights (100--950 on Windows, 100--900 on macOS) per family
+- Results cached after first scan; repeated `clearCache() → scan()` cycles are memory-safe
+- No native build step -- pure `dart:ffi` with system libraries
 
 ## Installation
 
@@ -93,6 +93,12 @@ Standard `DWRITE_FONT_WEIGHT` / CSS `font-weight` values:
 
 Not all fonts support every weight. A font may have any subset of these values.
 
+#### macOS weight caveat
+
+macOS CoreText reports font weight as a normalized float in the range `−1.0` to `1.0`. `just_font_scan` snaps each value to the nearest bucket in Apple's `NSFontWeight` table and reports the corresponding CSS weight. This is an **approximation** — a font whose native weight is e.g. `0.36` (between Semibold `0.30` and Bold `0.40`) will be reported as `700` because it is closer to Bold. On Windows, `DWRITE_FONT_WEIGHT` values map 1:1, so Windows results are exact.
+
+The CSS weight `950` (ExtraBlack) is never produced on macOS because no public `NSFontWeight` constant corresponds to it.
+
 ## Usage
 
 ### Basic scan
@@ -152,7 +158,7 @@ final updated = JustFontScan.scan();
 | Platform | Status | API |
 |----------|--------|-----|
 | Windows  | Supported | DirectWrite (`IDWriteFactory`) |
-| macOS    | Planned | CoreText |
+| macOS    | Supported | CoreText (`CTFontCollection`) |
 | Linux    | Not yet | -- |
 
 On unsupported platforms, `scan()` returns an empty list and `weightsFor()` always returns `[400]`.
@@ -160,4 +166,4 @@ On unsupported platforms, `scan()` returns an empty list and `weightsFor()` alwa
 ## Requirements
 
 - Dart SDK `>=3.9.2`
-- Windows 7+ (DirectWrite is preinstalled)
+- Windows 7+ (DirectWrite is preinstalled) **or** macOS 10.13+ (CoreText is preinstalled)
