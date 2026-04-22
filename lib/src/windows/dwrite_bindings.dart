@@ -1,6 +1,7 @@
-// ignore_for_file: non_constant_identifier_names, constant_identifier_names
+// ignore_for_file: non_constant_identifier_names, constant_identifier_names, camel_case_types
 // COM/DirectWrite bindings follow Windows SDK naming conventions:
-// types use PascalCase (GUID, HRESULT) and constants use ALL_CAPS
+// types use PascalCase (GUID, HRESULT), structs use ALL_CAPS
+// (DWRITE_FONT_AXIS_RANGE), and constants use ALL_CAPS
 // (DWRITE_FACTORY_TYPE_SHARED), which conflict with Dart lint rules.
 
 import 'dart:ffi';
@@ -23,6 +24,16 @@ const int kDWriteFontWeightMax = 1000;
 
 /// Maximum sane font count per family (Windows-specific: face iteration cap).
 const int kMaxFontCount = 1000;
+
+/// `DWRITE_FONT_AXIS_TAG_WEIGHT` — `'wght'` packed little-endian
+/// (`'w' | 'g'<<8 | 'h'<<16 | 't'<<24`). DirectWrite's `FOUR_CC` packing
+/// is the byte-reverse of the macOS/OpenType big-endian convention.
+const int kDWriteFontAxisTagWeight = 0x74686777;
+
+/// Sanity cap on `IDWriteFontResource::GetFontAxisCount` — variable fonts
+/// in the wild use 1–6 axes (`wght`, `wdth`, `slnt`, `ital`, `opsz`,
+/// occasionally one custom). 64 leaves headroom for malformed fonts.
+const int kMaxFontAxisCount = 64;
 
 // --- GUIDs ---
 
@@ -68,6 +79,49 @@ Pointer<GUID> allocIIDWriteFactory(Arena arena) {
   guid.ref.data4_6 = 0xdb;
   guid.ref.data4_7 = 0x48;
   return guid;
+}
+
+/// Allocates and fills IID_IDWriteFontFace5:
+/// {98EFF3A5-B667-479A-B145-E2FA5B9FDC29}
+///
+/// IDWriteFontFace5 (Windows 10 1803+, dwrite_3.h) adds the variable-font
+/// inspection methods `HasVariations` and `GetFontResource`. On older
+/// Windows builds, `QueryInterface` for this IID returns `E_NOINTERFACE`
+/// and the scanner falls back to static-font behavior.
+Pointer<GUID> allocIIDWriteFontFace5(Arena arena) {
+  final guid = arena<GUID>();
+  guid.ref.data1 = 0x98EFF3A5;
+  guid.ref.data2 = 0xB667;
+  guid.ref.data3 = 0x479A;
+  guid.ref.data4_0 = 0xB1;
+  guid.ref.data4_1 = 0x45;
+  guid.ref.data4_2 = 0xE2;
+  guid.ref.data4_3 = 0xFA;
+  guid.ref.data4_4 = 0x5B;
+  guid.ref.data4_5 = 0x9F;
+  guid.ref.data4_6 = 0xDC;
+  guid.ref.data4_7 = 0x29;
+  return guid;
+}
+
+// --- Variable font axis structs ---
+
+/// `DWRITE_FONT_AXIS_RANGE` — 12-byte struct: `{UINT32 axisTag; FLOAT min; FLOAT max;}`.
+base class DWRITE_FONT_AXIS_RANGE extends Struct {
+  @Uint32()
+  external int axisTag;
+  @Float()
+  external double minValue;
+  @Float()
+  external double maxValue;
+}
+
+/// `DWRITE_FONT_AXIS_VALUE` — 8-byte struct: `{UINT32 axisTag; FLOAT value;}`.
+base class DWRITE_FONT_AXIS_VALUE extends Struct {
+  @Uint32()
+  external int axisTag;
+  @Float()
+  external double value;
 }
 
 // --- DWriteCreateFactory ---
@@ -167,6 +221,31 @@ void comRelease(Pointer<IntPtr> comPtr) {
   if (comPtr.address == 0) return;
   final fn = vtableSlot<_ReleaseNative>(comPtr, 2).asFunction<_ReleaseDart>();
   fn(comPtr);
+}
+
+/// IUnknown::QueryInterface — vtable slot 0
+///
+/// Used to upcast `IDWriteFontFace` → `IDWriteFontFace5` for variable-font
+/// inspection. Returns `S_OK` on success, `E_NOINTERFACE` on older Windows.
+typedef _QueryInterfaceNative = Int32 Function(
+  Pointer<IntPtr> self,
+  Pointer<GUID> riid,
+  Pointer<Pointer<IntPtr>> ppv,
+);
+typedef _QueryInterfaceDart = int Function(
+  Pointer<IntPtr> self,
+  Pointer<GUID> riid,
+  Pointer<Pointer<IntPtr>> ppv,
+);
+
+int comQueryInterface(
+  Pointer<IntPtr> self,
+  Pointer<GUID> iid,
+  Pointer<Pointer<IntPtr>> outPpv,
+) {
+  final fn = vtableSlot<_QueryInterfaceNative>(self, 0)
+      .asFunction<_QueryInterfaceDart>();
+  return fn(self, iid, outPpv);
 }
 
 // --- IDWriteFactory vtable ---
@@ -342,6 +421,135 @@ typedef _GetWeightDart = int Function(Pointer<IntPtr> self);
 int fontGetWeight(Pointer<IntPtr> font) {
   final fn = vtableSlot<_GetWeightNative>(font, 4).asFunction<_GetWeightDart>();
   return fn(font);
+}
+
+/// IDWriteFont::CreateFontFace — vtable slot 13
+///
+/// Returns an `IDWriteFontFace` that can be `QueryInterface`'d for
+/// `IDWriteFontFace5` to inspect variation axes.
+typedef _CreateFontFaceNative = Int32 Function(
+  Pointer<IntPtr> self,
+  Pointer<Pointer<IntPtr>> outFontFace,
+);
+typedef _CreateFontFaceDart = int Function(
+  Pointer<IntPtr> self,
+  Pointer<Pointer<IntPtr>> outFontFace,
+);
+
+int fontCreateFontFace(
+  Pointer<IntPtr> font,
+  Pointer<Pointer<IntPtr>> outFontFace,
+) {
+  final fn = vtableSlot<_CreateFontFaceNative>(font, 13)
+      .asFunction<_CreateFontFaceDart>();
+  return fn(font, outFontFace);
+}
+
+// --- IDWriteFontFace5 vtable (Windows 10 1803+, dwrite_3.h) ---
+// Inherits IDWriteFontFace4 → 3 → 2 → 1 → IDWriteFontFace → IUnknown.
+// Slot count up through IDWriteFontFace4 = 53. IDWriteFontFace5 adds:
+//  [53] GetFontAxisValueCount
+//  [54] GetFontAxisValues
+//  [55] HasVariations           — BOOL (Int32)
+//  [56] GetFontResource         — HRESULT (out IDWriteFontResource**)
+//  [57] Equals
+
+/// IDWriteFontFace5::HasVariations — vtable slot 55
+typedef _HasVariationsNative = Int32 Function(Pointer<IntPtr> self);
+typedef _HasVariationsDart = int Function(Pointer<IntPtr> self);
+
+int fontFace5HasVariations(Pointer<IntPtr> face5) {
+  final fn = vtableSlot<_HasVariationsNative>(face5, 55)
+      .asFunction<_HasVariationsDart>();
+  return fn(face5);
+}
+
+/// IDWriteFontFace5::GetFontResource — vtable slot 56
+typedef _GetFontResourceNative = Int32 Function(
+  Pointer<IntPtr> self,
+  Pointer<Pointer<IntPtr>> outFontResource,
+);
+typedef _GetFontResourceDart = int Function(
+  Pointer<IntPtr> self,
+  Pointer<Pointer<IntPtr>> outFontResource,
+);
+
+int fontFace5GetFontResource(
+  Pointer<IntPtr> face5,
+  Pointer<Pointer<IntPtr>> outResource,
+) {
+  final fn = vtableSlot<_GetFontResourceNative>(face5, 56)
+      .asFunction<_GetFontResourceDart>();
+  return fn(face5, outResource);
+}
+
+// --- IDWriteFontResource vtable (dwrite_3.h) ---
+// IUnknown (3) +
+//  [3]  GetFontFile
+//  [4]  GetFontFaceIndex
+//  [5]  GetFontAxisCount               — UINT32
+//  [6]  GetDefaultFontAxisValues       — HRESULT (DWRITE_FONT_AXIS_VALUE*, count)
+//  [7]  GetFontAxisRanges              — HRESULT (DWRITE_FONT_AXIS_RANGE*, count)
+//  [8]  GetFontAxisAttributes
+//  [9]  GetAxisNames
+//  [10] GetAxisValueNameCount
+//  [11] GetAxisValueNames
+//  [12] HasVariations
+//  [13] CreateFontFace
+//  [14] CreateFontFaceReference
+
+/// IDWriteFontResource::GetFontAxisCount — vtable slot 5
+typedef _GetFontAxisCountNative = Uint32 Function(Pointer<IntPtr> self);
+typedef _GetFontAxisCountDart = int Function(Pointer<IntPtr> self);
+
+int fontResourceGetFontAxisCount(Pointer<IntPtr> resource) {
+  final fn = vtableSlot<_GetFontAxisCountNative>(resource, 5)
+      .asFunction<_GetFontAxisCountDart>();
+  return fn(resource);
+}
+
+/// IDWriteFontResource::GetDefaultFontAxisValues — vtable slot 6
+typedef _GetDefaultFontAxisValuesNative = Int32 Function(
+  Pointer<IntPtr> self,
+  Pointer<DWRITE_FONT_AXIS_VALUE> values,
+  Uint32 valueCount,
+);
+typedef _GetDefaultFontAxisValuesDart = int Function(
+  Pointer<IntPtr> self,
+  Pointer<DWRITE_FONT_AXIS_VALUE> values,
+  int valueCount,
+);
+
+int fontResourceGetDefaultFontAxisValues(
+  Pointer<IntPtr> resource,
+  Pointer<DWRITE_FONT_AXIS_VALUE> values,
+  int valueCount,
+) {
+  final fn = vtableSlot<_GetDefaultFontAxisValuesNative>(resource, 6)
+      .asFunction<_GetDefaultFontAxisValuesDart>();
+  return fn(resource, values, valueCount);
+}
+
+/// IDWriteFontResource::GetFontAxisRanges — vtable slot 7
+typedef _GetFontAxisRangesNative = Int32 Function(
+  Pointer<IntPtr> self,
+  Pointer<DWRITE_FONT_AXIS_RANGE> ranges,
+  Uint32 rangeCount,
+);
+typedef _GetFontAxisRangesDart = int Function(
+  Pointer<IntPtr> self,
+  Pointer<DWRITE_FONT_AXIS_RANGE> ranges,
+  int rangeCount,
+);
+
+int fontResourceGetFontAxisRanges(
+  Pointer<IntPtr> resource,
+  Pointer<DWRITE_FONT_AXIS_RANGE> ranges,
+  int rangeCount,
+) {
+  final fn = vtableSlot<_GetFontAxisRangesNative>(resource, 7)
+      .asFunction<_GetFontAxisRangesDart>();
+  return fn(resource, ranges, rangeCount);
 }
 
 // --- IDWriteLocalizedStrings vtable ---

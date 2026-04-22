@@ -52,17 +52,22 @@ List<FontFamily> _scanDescriptorArray(
   final count = b.cfArrayGetCount(array).clamp(0, kMaxDescriptorCount);
 
   final weightsByFamily = <String, Set<int>>{};
+  final axisByFamily = <String, WeightAxis>{};
 
   for (var i = 0; i < count; i++) {
     final desc = b.cfArrayGetValueAtIndex(array, i); // borrowed
     if (desc.address == 0) continue;
-    _scanDescriptor(b, desc, weightsByFamily, arena);
+    _scanDescriptor(b, desc, weightsByFamily, axisByFamily, arena);
   }
 
   final families = <FontFamily>[];
   for (final entry in weightsByFamily.entries) {
     final weights = entry.value.toList()..sort();
-    families.add(FontFamily(name: entry.key, weights: weights));
+    families.add(FontFamily(
+      name: entry.key,
+      weights: weights,
+      weightAxis: axisByFamily[entry.key],
+    ));
   }
   families.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
@@ -75,14 +80,27 @@ List<FontFamily> _scanDescriptorArray(
 void _scanDescriptor(
   MacFontBindings b,
   CFTypeRef desc,
-  Map<String, Set<int>> acc,
+  Map<String, Set<int>> weightsAcc,
+  Map<String, WeightAxis> axisAcc,
   Arena arena,
 ) {
   final name = _copyFamilyName(b, desc, arena);
   if (name == null) return;
 
   final weight = _copyWeight(b, desc, arena);
-  acc.putIfAbsent(name, () => <int>{}).add(weight);
+  weightsAcc.putIfAbsent(name, () => <int>{}).add(weight);
+
+  // Extract the variable-font wght axis at most once per family. Italic
+  // and roman descriptors of the same VF report identical axis ranges in
+  // practice, so the first non-null hit wins.
+  if (axisAcc.containsKey(name)) return;
+  final symbols = b.variationAxes;
+  if (symbols == null) return;
+
+  final axis = _copyWghtAxis(b, desc, symbols, arena);
+  if (axis != null) {
+    axisAcc[name] = axis;
+  }
 }
 
 String? _copyFamilyName(
@@ -127,6 +145,68 @@ int _copyWeight(
   } finally {
     b.cfRelease(traits);
   }
+}
+
+/// Returns the `wght` axis range for a variable-font descriptor, or
+/// `null` if the descriptor is not a variable font or has no `wght` axis.
+WeightAxis? _copyWghtAxis(
+  MacFontBindings b,
+  CFTypeRef desc,
+  VariationAxisSymbols symbols,
+  Arena arena,
+) {
+  final axesArray =
+      b.ctFontDescriptorCopyAttribute(desc, symbols.axesAttribute);
+  if (axesArray.address == 0) return null;
+
+  try {
+    final count = b.cfArrayGetCount(axesArray);
+    for (var i = 0; i < count; i++) {
+      final axisDict = b.cfArrayGetValueAtIndex(axesArray, i); // borrowed
+      if (axisDict.address == 0) continue;
+
+      // Identifier is a CFNumber wrapping the 4-char OpenType tag.
+      // CFDictionaryGetValue returns a borrowed reference — do not release.
+      final idNum = b.cfDictionaryGetValue(axisDict, symbols.identifierKey);
+      if (idNum.address == 0) continue;
+
+      final idOut = arena<Int64>();
+      final ok = b.cfNumberGetValueInt64(idNum, kCFNumberSInt64Type, idOut);
+      if (ok == 0) continue;
+      if (idOut.value != kOpenTypeWghtTag) continue;
+
+      // Found wght — pull min/max/default. If any is missing the
+      // descriptor is malformed; skip the axis entirely.
+      final min = _copyAxisDouble(b, axisDict, symbols.minKey, arena);
+      final max = _copyAxisDouble(b, axisDict, symbols.maxKey, arena);
+      final def = _copyAxisDouble(b, axisDict, symbols.defaultKey, arena);
+      if (min == null || max == null || def == null) return null;
+
+      return WeightAxis(
+        min: min.round(),
+        max: max.round(),
+        defaultValue: def.round(),
+      );
+    }
+    return null;
+  } finally {
+    b.cfRelease(axesArray);
+  }
+}
+
+double? _copyAxisDouble(
+  MacFontBindings b,
+  CFTypeRef dict,
+  CFTypeRef key,
+  Arena arena,
+) {
+  final num = b.cfDictionaryGetValue(dict, key); // borrowed
+  if (num.address == 0) return null;
+
+  final out = arena<Double>();
+  final ok = b.cfNumberGetValue(num, kCFNumberDoubleType, out);
+  if (ok == 0) return null;
+  return out.value;
 }
 
 String? _cfStringToDart(

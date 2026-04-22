@@ -30,6 +30,15 @@ const int kCFStringEncodingUTF8 = 0x08000100;
 /// Dart's `double` is IEEE-754 64-bit, which is ABI-compatible.
 const int kCFNumberDoubleType = 13;
 
+/// `kCFNumberSInt64Type` — 8-byte signed integer.
+/// Used for reading variation axis identifiers (4-char OpenType tags
+/// stored as 32-bit ints; SInt64 is wide enough with no precision loss).
+const int kCFNumberSInt64Type = 4;
+
+/// OpenType `'wght'` axis tag as a big-endian FourCC integer
+/// (`'w'`<<24 | `'g'`<<16 | `'h'`<<8 | `'t'`).
+const int kOpenTypeWghtTag = 0x77676874;
+
 // --- DynamicLibrary loaders (absolute framework paths; mirrors Windows System32 policy) ---
 
 DynamicLibrary _loadCoreFoundation() => DynamicLibrary.open(
@@ -92,6 +101,21 @@ typedef _CFNumberGetValueDart = int Function(
   Pointer<Double> valuePtr,
 );
 
+// Same C function (`CFNumberGetValue`) but typed for a 64-bit integer
+// out-pointer. The C signature takes `void*`; Dart FFI requires us to
+// commit to a concrete pointer type, so we resolve the symbol twice with
+// different typedefs rather than casting at call sites.
+typedef _CFNumberGetValueInt64Native = Uint8 Function(
+  CFTypeRef number,
+  IntPtr type,
+  Pointer<Int64> valuePtr,
+);
+typedef _CFNumberGetValueInt64Dart = int Function(
+  CFTypeRef number,
+  int type,
+  Pointer<Int64> valuePtr,
+);
+
 // --- CoreText function typedefs ---
 
 typedef _CTFontCollectionCreateFromAvailableFontsNative = CFTypeRef Function(
@@ -128,6 +152,44 @@ typedef ObjcPoolPopDart = void Function(Pointer<Void>);
 
 // --- Bindings holder ---
 
+/// Bundle of the five extern `CFStringRef` constants needed to read
+/// OpenType variation axis metadata from a `CTFontDescriptor`.
+///
+/// Held as a single nullable group on [MacFontBindings] so the scanner
+/// can degrade gracefully — if any symbol fails to resolve (extremely
+/// unlikely, since all five have shipped since macOS 10.5), the whole
+/// group becomes null and variable-font detection is silently skipped
+/// without breaking the rest of the scan.
+class VariationAxisSymbols {
+  /// `CFStringRef kCTFontVariationAxesAttribute` —
+  /// descriptor attribute returning a `CFArrayRef<CFDictionaryRef>`.
+  final CFTypeRef axesAttribute;
+
+  /// `CFStringRef kCTFontVariationAxisIdentifierKey` —
+  /// dict key for the axis tag (CFNumber wrapping a 32-bit FourCC).
+  final CFTypeRef identifierKey;
+
+  /// `CFStringRef kCTFontVariationAxisMinimumValueKey` —
+  /// dict key for the axis lower bound (CFNumber, double).
+  final CFTypeRef minKey;
+
+  /// `CFStringRef kCTFontVariationAxisMaximumValueKey` —
+  /// dict key for the axis upper bound (CFNumber, double).
+  final CFTypeRef maxKey;
+
+  /// `CFStringRef kCTFontVariationAxisDefaultValueKey` —
+  /// dict key for the axis default value (CFNumber, double).
+  final CFTypeRef defaultKey;
+
+  const VariationAxisSymbols({
+    required this.axesAttribute,
+    required this.identifierKey,
+    required this.minKey,
+    required this.maxKey,
+    required this.defaultKey,
+  });
+}
+
 /// Resolved CoreFoundation + CoreText symbols for a single scan session.
 ///
 /// The three extern `CFStringRef` constants
@@ -144,6 +206,7 @@ class MacFontBindings {
   final CFStringGetMaximumSizeForEncodingDart cfStringGetMaxSize;
   final _CFStringGetCStringDart _cfStringGetCString;
   final _CFNumberGetValueDart _cfNumberGetValue;
+  final _CFNumberGetValueInt64Dart _cfNumberGetValueInt64;
 
   // CoreText
   final CTFontCollectionCreateFromAvailableFontsDart
@@ -165,6 +228,10 @@ class MacFontBindings {
   /// `CFStringRef kCTFontWeightTrait`
   final CFTypeRef kFontWeightTrait;
 
+  /// Variation-axis-related symbols, or `null` if any failed to resolve
+  /// (treat as "variable font support unavailable on this system").
+  final VariationAxisSymbols? variationAxes;
+
   MacFontBindings._({
     required _CFReleaseDart cfRelease,
     required this.cfArrayGetCount,
@@ -174,6 +241,7 @@ class MacFontBindings {
     required this.cfStringGetMaxSize,
     required _CFStringGetCStringDart cfStringGetCString,
     required _CFNumberGetValueDart cfNumberGetValue,
+    required _CFNumberGetValueInt64Dart cfNumberGetValueInt64,
     required this.ctFontCollectionCreateFromAvailable,
     required this.ctFontCollectionCreateMatching,
     required this.ctFontDescriptorCopyAttribute,
@@ -182,9 +250,11 @@ class MacFontBindings {
     required this.kFontFamilyNameAttribute,
     required this.kFontTraitsAttribute,
     required this.kFontWeightTrait,
+    required this.variationAxes,
   })  : _cfRelease = cfRelease,
         _cfStringGetCString = cfStringGetCString,
         _cfNumberGetValue = cfNumberGetValue,
+        _cfNumberGetValueInt64 = cfNumberGetValueInt64,
         _objcPoolPush = objcPoolPush,
         _objcPoolPop = objcPoolPop;
 
@@ -228,6 +298,11 @@ class MacFontBindings {
       );
     }
 
+    // Variation-axis symbols are optional. All five have shipped since
+    // macOS 10.5, but if any lookup fails or any address is 0 we fall
+    // back to "no variable font support" rather than aborting the scan.
+    final variationAxes = _loadVariationAxisSymbols(ct);
+
     return MacFontBindings._(
       cfRelease:
           cf.lookupFunction<_CFReleaseNative, _CFReleaseDart>('CFRelease'),
@@ -252,6 +327,8 @@ class MacFontBindings {
       cfNumberGetValue:
           cf.lookupFunction<_CFNumberGetValueNative, _CFNumberGetValueDart>(
               'CFNumberGetValue'),
+      cfNumberGetValueInt64: cf.lookupFunction<_CFNumberGetValueInt64Native,
+          _CFNumberGetValueInt64Dart>('CFNumberGetValue'),
       ctFontCollectionCreateFromAvailable: ct.lookupFunction<
           _CTFontCollectionCreateFromAvailableFontsNative,
           CTFontCollectionCreateFromAvailableFontsDart>(
@@ -276,7 +353,41 @@ class MacFontBindings {
       kFontFamilyNameAttribute: famRef,
       kFontTraitsAttribute: traitsRef,
       kFontWeightTrait: weightRef,
+      variationAxes: variationAxes,
     );
+  }
+
+  static VariationAxisSymbols? _loadVariationAxisSymbols(DynamicLibrary ct) {
+    try {
+      final axesRef =
+          ct.lookup<CFTypeRef>('kCTFontVariationAxesAttribute').value;
+      final idRef =
+          ct.lookup<CFTypeRef>('kCTFontVariationAxisIdentifierKey').value;
+      final minRef =
+          ct.lookup<CFTypeRef>('kCTFontVariationAxisMinimumValueKey').value;
+      final maxRef =
+          ct.lookup<CFTypeRef>('kCTFontVariationAxisMaximumValueKey').value;
+      final defRef =
+          ct.lookup<CFTypeRef>('kCTFontVariationAxisDefaultValueKey').value;
+
+      if (axesRef.address == 0 ||
+          idRef.address == 0 ||
+          minRef.address == 0 ||
+          maxRef.address == 0 ||
+          defRef.address == 0) {
+        return null;
+      }
+
+      return VariationAxisSymbols(
+        axesAttribute: axesRef,
+        identifierKey: idRef,
+        minKey: minRef,
+        maxKey: maxRef,
+        defaultKey: defRef,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Null-safe wrapper for `CFRelease` — skips when the pointer is null so
@@ -302,6 +413,14 @@ class MacFontBindings {
     Pointer<Double> valuePtr,
   ) =>
       _cfNumberGetValue(number, type, valuePtr);
+
+  /// Calls `CFNumberGetValue` with a 64-bit integer out-pointer, returning 0/1.
+  int cfNumberGetValueInt64(
+    CFTypeRef number,
+    int type,
+    Pointer<Int64> valuePtr,
+  ) =>
+      _cfNumberGetValueInt64(number, type, valuePtr);
 
   /// Runs [body] inside an Objective-C autorelease pool.
   ///

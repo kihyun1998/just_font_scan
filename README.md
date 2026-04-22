@@ -9,6 +9,7 @@ Dart package to scan system font families and their supported weights using plat
 
 - Retrieves all system font families grouped by the platform's native family grouping (e.g. "Source Code Pro" is one family with weights 200--900, not separate entries per variant)
 - Reports supported font weights (100--950 on Windows, 100--900 on macOS) per family
+- Detects OpenType **variable fonts** and exposes their continuous `wght` axis as a `min` / `max` / `default` triple
 - Results cached after first scan; repeated `clearCache() → scan()` cycles are memory-safe
 - No native build step -- pure `dart:ffi` with system libraries
 
@@ -32,9 +33,22 @@ Represents a single system font family.
 | Property | Type | Description |
 |----------|------|-------------|
 | `name` | `String` | Font family name (e.g. `'Arial'`, `'Source Code Pro'`). |
-| `weights` | `List<int>` | Supported font weights in ascending order. Values follow the CSS/OpenType convention (see weight table below). |
+| `weights` | `List<int>` | Supported font weights in ascending order. Values follow the CSS/OpenType convention (see weight table below). For variable fonts, contains the discrete weights of any named instances declared by the font. |
+| `weightAxis` | `WeightAxis?` | The continuous `wght` axis range when the family contains an OpenType variable font, or `null` for static-only families. See [Variable fonts](#variable-fonts). |
 
 `FontFamily` supports equality comparison (`==`) and can be used as a map key.
+
+### `WeightAxis` class
+
+Continuous `wght` axis range exposed by an OpenType variable font.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `min` | `int` | Minimum supported weight (inclusive). |
+| `max` | `int` | Maximum supported weight (inclusive). |
+| `defaultValue` | `int` | Default weight used when no explicit value is requested. |
+
+All three fields are integers. Platform-reported floats are rounded to the nearest whole number. Most fonts use the CSS 1–1000 scale, but a few legacy fonts (e.g. macOS `Skia`) use non-standard ranges — values are exposed verbatim.
 
 ### `JustFontScan` class
 
@@ -99,6 +113,26 @@ macOS CoreText reports font weight as a normalized float in the range `−1.0` t
 
 The CSS weight `950` (ExtraBlack) is never produced on macOS because no public `NSFontWeight` constant corresponds to it.
 
+### Variable fonts
+
+When a font family contains an OpenType variable font (`fvar` table with a `wght` axis), `FontFamily.weightAxis` is populated with the continuous range. Otherwise it is `null`.
+
+The `weights` list and `weightAxis` are independent — for a family that contains both static instances and a variable font, both are populated:
+
+- `weights` lists discrete weights of static faces and named instances.
+- `weightAxis` describes the continuous range supported by the variable face.
+
+| Family example | `weights` | `weightAxis` |
+|----------------|-----------|--------------|
+| `Arial` (static only) | `[400, 700, 900]` | `null` |
+| `Noto Sans Syriac` (variable, no named instances) | `[400]` | `WeightAxis(min: 100, max: 900, default: 400)` |
+| `Inter` (static + variable) | `[100, 200, …, 900]` | `WeightAxis(min: 100, max: 900, default: 400)` |
+
+**Platform notes**
+
+- **Windows**: requires Windows 10 1803 (build 17134, April 2018) or newer for the `IDWriteFontFace5` interface used to read variation axes. On older builds the QueryInterface fails silently and `weightAxis` is always `null` — the rest of the scan still works.
+- **macOS**: `weightAxis` is read via `kCTFontVariationAxesAttribute`, available since macOS 10.5. The system font (`SF Pro`) is itself a variable font but is hidden under the internal name `.AppleSystemUIFont` and filtered out by the `.`-prefix rule.
+
 ## Usage
 
 ### Basic scan
@@ -151,6 +185,22 @@ final exists = families.any(
 ```dart
 JustFontScan.clearCache();
 final updated = JustFontScan.scan();
+```
+
+### Detect variable fonts
+
+```dart
+final families = JustFontScan.scan();
+final variable = families.where((f) => f.weightAxis != null);
+
+for (final f in variable) {
+  final axis = f.weightAxis!;
+  print('${f.name}: any weight from ${axis.min} to ${axis.max} '
+        '(default ${axis.defaultValue})');
+}
+// Noto Sans Syriac: any weight from 100 to 900 (default 400)
+// PingFang SC:      any weight from 100 to 600 (default 500)
+// ...
 ```
 
 ## Platform support

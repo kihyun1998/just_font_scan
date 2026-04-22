@@ -121,10 +121,14 @@ FontFamily? _scanFamily(
     // Skip vertical writing fonts
     if (name.startsWith('@')) return null;
 
-    final weights = _getFamilyWeights(family, arena);
-    if (weights.isEmpty) return null;
+    final result = _getFamilyWeightsAndAxis(family, arena);
+    if (result.weights.isEmpty) return null;
 
-    return FontFamily(name: name, weights: weights);
+    return FontFamily(
+      name: name,
+      weights: result.weights,
+      weightAxis: result.axis,
+    );
   } finally {
     comRelease(family);
   }
@@ -178,9 +182,13 @@ String? _getLocalizedString(Pointer<IntPtr> strings, Arena arena) {
   return buffer.toDartString(length: length);
 }
 
-List<int> _getFamilyWeights(Pointer<IntPtr> family, Arena arena) {
+({List<int> weights, WeightAxis? axis}) _getFamilyWeightsAndAxis(
+  Pointer<IntPtr> family,
+  Arena arena,
+) {
   final fontCount = fontListGetFontCount(family).clamp(0, kMaxFontCount);
   final weightSet = <int>{};
+  WeightAxis? axis;
 
   for (var i = 0; i < fontCount; i++) {
     final ppFont = arena<Pointer<IntPtr>>();
@@ -195,11 +203,113 @@ List<int> _getFamilyWeights(Pointer<IntPtr> family, Arena arena) {
       if (weight >= kDWriteFontWeightMin && weight <= kDWriteFontWeightMax) {
         weightSet.add(weight);
       }
+
+      // Variable font axis: take the first wght axis encountered in the
+      // family. Multiple faces in a VF family share the same resource and
+      // therefore the same axis range, so subsequent extractions would be
+      // redundant work.
+      axis ??= _tryReadWghtAxis(font, arena);
     } finally {
       comRelease(font);
     }
   }
 
   final weights = weightSet.toList()..sort();
-  return weights;
+  return (weights: weights, axis: axis);
+}
+
+/// Reads the `wght` variation-axis range of [font] if it is a variable
+/// font, otherwise returns `null`. Silently swallows all COM failures —
+/// notably `E_NOINTERFACE` from `QueryInterface(IDWriteFontFace5)` on
+/// Windows builds older than 1803, where variable-font support is
+/// genuinely unavailable.
+WeightAxis? _tryReadWghtAxis(Pointer<IntPtr> font, Arena arena) {
+  final ppFace = arena<Pointer<IntPtr>>();
+  if (!succeeded(fontCreateFontFace(font, ppFace))) return null;
+  final face = ppFace.value;
+  if (face.address == 0) return null;
+
+  try {
+    final ppFace5 = arena<Pointer<IntPtr>>();
+    final iid = allocIIDWriteFontFace5(arena);
+    final qiHr = comQueryInterface(face, iid, ppFace5);
+    if (!succeeded(qiHr)) return null;
+    final face5 = ppFace5.value;
+    if (face5.address == 0) return null;
+
+    try {
+      if (fontFace5HasVariations(face5) == 0) return null;
+
+      final ppResource = arena<Pointer<IntPtr>>();
+      if (!succeeded(fontFace5GetFontResource(face5, ppResource))) {
+        return null;
+      }
+      final resource = ppResource.value;
+      if (resource.address == 0) return null;
+
+      try {
+        return _readWghtAxisFromResource(resource, arena);
+      } finally {
+        comRelease(resource);
+      }
+    } finally {
+      comRelease(face5);
+    }
+  } finally {
+    comRelease(face);
+  }
+}
+
+/// Extracts the `wght` axis range and default value from an
+/// `IDWriteFontResource`. Returns `null` if the font has no `wght` axis
+/// or any of the COM calls fail.
+WeightAxis? _readWghtAxisFromResource(
+  Pointer<IntPtr> resource,
+  Arena arena,
+) {
+  final axisCount =
+      fontResourceGetFontAxisCount(resource).clamp(0, kMaxFontAxisCount);
+  if (axisCount == 0) return null;
+
+  final ranges = arena<DWRITE_FONT_AXIS_RANGE>(axisCount);
+  if (!succeeded(fontResourceGetFontAxisRanges(resource, ranges, axisCount))) {
+    return null;
+  }
+
+  var min = 0.0;
+  var max = 0.0;
+  var found = false;
+  for (var i = 0; i < axisCount; i++) {
+    final r = (ranges + i).ref;
+    if (r.axisTag == kDWriteFontAxisTagWeight) {
+      min = r.minValue;
+      max = r.maxValue;
+      found = true;
+      break;
+    }
+  }
+  if (!found) return null;
+
+  // Default value comes from a separate API and may differ from the
+  // axis midpoint. If the call fails, fall back to the range midpoint
+  // so callers still get a usable hint.
+  var def = ((min + max) / 2);
+  final defaults = arena<DWRITE_FONT_AXIS_VALUE>(axisCount);
+  if (succeeded(
+    fontResourceGetDefaultFontAxisValues(resource, defaults, axisCount),
+  )) {
+    for (var i = 0; i < axisCount; i++) {
+      final v = (defaults + i).ref;
+      if (v.axisTag == kDWriteFontAxisTagWeight) {
+        def = v.value;
+        break;
+      }
+    }
+  }
+
+  return WeightAxis(
+    min: min.round(),
+    max: max.round(),
+    defaultValue: def.round(),
+  );
 }

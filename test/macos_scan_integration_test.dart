@@ -86,5 +86,25 @@ void main() {
       expect(identical(first, second), isTrue,
           reason: 'Second call should return the cached list');
     });
+
+    test('weightAxis fields are internally consistent when present', () {
+      // Every shipping macOS includes at least a few variable fonts
+      // (Noto Sans Syriac, PingFang, STIX Two Text, …). Where present,
+      // the axis must satisfy min ≤ default ≤ max.
+      final families = JustFontScan.scan();
+      final variable = families.where((f) => f.weightAxis != null).toList();
+      expect(variable, isNotEmpty,
+          reason: 'macOS ships with several variable fonts by default');
+
+      for (final family in variable) {
+        final axis = family.weightAxis!;
+        expect(axis.min, lessThanOrEqualTo(axis.max),
+            reason: 'family=${family.name} axis=$axis');
+        expect(axis.defaultValue, greaterThanOrEqualTo(axis.min),
+            reason: 'family=${family.name} axis=$axis');
+        expect(axis.defaultValue, lessThanOrEqualTo(axis.max),
+            reason: 'family=${family.name} axis=$axis');
+      }
+    });
   });
 }
