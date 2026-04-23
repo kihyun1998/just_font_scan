@@ -44,6 +44,8 @@ FontFamily(
 ### Fixed
 
 - fix: Windows 11 file-path extraction works around the font-cache service loader refusing `QueryInterface(IDWriteLocalFontFileLoader)` (`E_NOINTERFACE`) by parsing the reference key directly. Two key layouts handled: system fonts (`0x002A` tag + filename, resolved against `%SystemRoot%\Fonts`) and user/app-packaged fonts (absolute UTF-16 path). Observed 100% filePath coverage on a Windows 11 machine (1165 faces across 217 families).
+- fix: cap reference-key path length against `kMaxFontPathLength` in both layouts of `_extractPathFromSystemKey` — guards against a malformed font-cache entry whose `keySize` could otherwise drive `toDartString(length:)` to scan arbitrary native memory.
+- fix: raise macOS oblique-slant threshold from 0.05 to 0.1 (named constant `_kObliqueSlantThreshold`). 0.05 was too close to zero — CoreText's internal weight-to-slant normalization can leave upright faces with a small non-zero slant, causing false oblique classification.
 
 ### Non-breaking
 

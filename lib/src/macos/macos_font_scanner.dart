@@ -243,6 +243,12 @@ int _readSymbolicFromTraits(
   return out.value & 0xFFFFFFFF;
 }
 
+/// Minimum |slant| (CoreText normalized −1.0…1.0 scale) to classify a face
+/// as oblique when the italic trait bit is not set. 0.05 was too permissive —
+/// floating-point rounding in CoreText's internal normalization can leave
+/// upright faces with a non-zero slant, causing false oblique classification.
+const double _kObliqueSlantThreshold = 0.1;
+
 /// Converts a CoreText slant value (+/- scalar, typically within [−1.0, 1.0])
 /// and italic bit into a [FontStyle].
 ///
@@ -253,7 +259,7 @@ int _readSymbolicFromTraits(
 /// - Otherwise → [FontStyle.normal].
 FontStyle _deriveStyle(bool italicBit, double slant) {
   if (italicBit) return FontStyle.italic;
-  if (slant.abs() > 0.05) return FontStyle.oblique;
+  if (slant.abs() > _kObliqueSlantThreshold) return FontStyle.oblique;
   return FontStyle.normal;
 }
 

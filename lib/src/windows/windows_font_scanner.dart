@@ -467,6 +467,7 @@ String? _extractPathFromSystemKey(Pointer<Void> key, int keySize) {
     final filenameStart = filetimeBytes + 2;
     final filenameByteCount = keySize - filenameStart - nulBytes;
     if (filenameByteCount <= 0 || filenameByteCount.isOdd) return null;
+    if (filenameByteCount > kMaxFontPathLength * 2) return null;
 
     final String filename;
     try {
@@ -500,6 +501,7 @@ String? _extractPathFromSystemKey(Pointer<Void> key, int keySize) {
 
   final pathByteCount = keySize - filetimeBytes - nulBytes;
   if (pathByteCount <= 0 || pathByteCount.isOdd) return null;
+  if (pathByteCount > kMaxFontPathLength * 2) return null;
 
   try {
     final path = (bytes + filetimeBytes)
