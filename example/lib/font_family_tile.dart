@@ -45,8 +45,11 @@ class _FontFamilyTileState extends State<FontFamilyTile> {
               spacing: 4,
               runSpacing: 4,
               children: [
-                _CountChip(label: '${family.faces.length} face'
-                    '${family.faces.length == 1 ? '' : 's'}'),
+                _CountChip(
+                  label:
+                      '${family.faces.length} face'
+                      '${family.faces.length == 1 ? '' : 's'}',
+                ),
                 if (family.faces.any((f) => f.isMonospace))
                   const _FlagChip(label: 'mono'),
                 if (family.faces.any((f) => f.isSymbol))
@@ -127,8 +130,9 @@ class _FaceList extends StatelessWidget {
               children: [
                 Text(
                   face.faceName.isEmpty ? '(unnamed face)' : face.faceName,
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w600),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 Text(
                   'w=${face.weight}  ${face.style.name}  stretch=${face.stretch}'
@@ -137,13 +141,16 @@ class _FaceList extends StatelessWidget {
                   style: theme.textTheme.bodySmall,
                 ),
                 if (face.postScriptName != null)
-                  Text('ps: ${face.postScriptName}',
-                      style: theme.textTheme.bodySmall),
+                  Text(
+                    'ps: ${face.postScriptName}',
+                    style: theme.textTheme.bodySmall,
+                  ),
                 if (face.filePath != null)
                   Text(
                     face.filePath!,
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.hintColor),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.hintColor,
+                    ),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
                   ),

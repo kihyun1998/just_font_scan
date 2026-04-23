@@ -14,8 +14,9 @@ void _probe(Arena arena, Set<String> targets) {
       'CoInitializeEx');
   coInit(nullptr, COINIT_APARTMENTTHREADED);
 
-  final createFactory = dwrite.lookupFunction<DWriteCreateFactoryNative,
-      DWriteCreateFactoryDart>('DWriteCreateFactory');
+  final createFactory =
+      dwrite.lookupFunction<DWriteCreateFactoryNative, DWriteCreateFactoryDart>(
+          'DWriteCreateFactory');
   final iid = allocIIDWriteFactory(arena);
   final ppFactory = arena<Pointer<IntPtr>>();
   createFactory(DWRITE_FACTORY_TYPE_SHARED, iid, ppFactory);
@@ -80,8 +81,7 @@ void _probe(Arena arena, Set<String> targets) {
     }
     print('  hex: ${hex.join(' ')}');
     if (pKeySize.value >= 10 && pKeySize.value.isEven) {
-      final locTag =
-          (keyBytes + 8).value | ((keyBytes + 9).value << 8);
+      final locTag = (keyBytes + 8).value | ((keyBytes + 9).value << 8);
       print('  location tag: 0x${locTag.toRadixString(16)}');
       try {
         final filenameUtf16 = (keyBytes + 10).cast<Utf16>();

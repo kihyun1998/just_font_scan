@@ -49,8 +49,7 @@ void main() {
   final fullFilled = allFaces.where((f) => f.fullName != null).length;
   final faceNameFilled = allFaces.where((f) => f.faceName.isNotEmpty).length;
   final monoFaces = allFaces.where((f) => f.isMonospace).length;
-  final italicFaces =
-      allFaces.where((f) => f.style == FontStyle.italic).length;
+  final italicFaces = allFaces.where((f) => f.style == FontStyle.italic).length;
   final obliqueFaces =
       allFaces.where((f) => f.style == FontStyle.oblique).length;
 
