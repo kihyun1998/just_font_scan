@@ -30,6 +30,10 @@ const int kCFStringEncodingUTF8 = 0x08000100;
 /// Dart's `double` is IEEE-754 64-bit, which is ABI-compatible.
 const int kCFNumberDoubleType = 13;
 
+/// `kCFNumberSInt32Type` — 4-byte signed integer. Used for reading the
+/// `CTFontSymbolicTraits` bitmask (defined as `uint32_t` in CoreText).
+const int kCFNumberSInt32Type = 3;
+
 /// `kCFNumberSInt64Type` — 8-byte signed integer.
 /// Used for reading variation axis identifiers (4-char OpenType tags
 /// stored as 32-bit ints; SInt64 is wide enough with no precision loss).
@@ -38,6 +42,44 @@ const int kCFNumberSInt64Type = 4;
 /// OpenType `'wght'` axis tag as a big-endian FourCC integer
 /// (`'w'`<<24 | `'g'`<<16 | `'h'`<<8 | `'t'`).
 const int kOpenTypeWghtTag = 0x77676874;
+
+/// OpenType `'wdth'` axis tag (big-endian FourCC).
+const int kOpenTypeWdthTag = 0x77647468;
+
+/// OpenType `'slnt'` axis tag (big-endian FourCC).
+/// `slnt` values are typically negative degrees.
+const int kOpenTypeSlntTag = 0x736c6e74;
+
+/// OpenType `'ital'` axis tag (big-endian FourCC).
+const int kOpenTypeItalTag = 0x6974616c;
+
+/// OpenType `'opsz'` axis tag (big-endian FourCC). Values are in points.
+const int kOpenTypeOpszTag = 0x6f70737a;
+
+// --- CTFontSymbolicTraits bit masks ---
+// Values from `<CoreText/CTFontDescriptor.h>`. The top 4 bits encode the
+// stylistic class; the lower bits are independent trait flags.
+
+/// `kCTFontTraitItalic` — face is italic (designed or marked as italic).
+const int kCTFontTraitItalic = 1 << 0;
+
+/// `kCTFontTraitBold` — face is bold weight.
+const int kCTFontTraitBold = 1 << 1;
+
+/// `kCTFontTraitExpanded` — expanded width.
+const int kCTFontTraitExpanded = 1 << 5;
+
+/// `kCTFontTraitCondensed` — condensed width.
+const int kCTFontTraitCondensed = 1 << 6;
+
+/// `kCTFontTraitMonoSpace` — every glyph has the same advance width.
+const int kCTFontTraitMonoSpace = 1 << 10;
+
+/// Mask covering the top-4-bits stylistic class field.
+const int kCTFontClassMaskTrait = 0xF << 28;
+
+/// `kCTFontClassSymbolic` — the face is a symbol/dingbat font.
+const int kCTFontClassSymbolic = 12 << 28;
 
 // --- DynamicLibrary loaders (absolute framework paths; mirrors Windows System32 policy) ---
 
@@ -114,6 +156,32 @@ typedef _CFNumberGetValueInt64Dart = int Function(
   CFTypeRef number,
   int type,
   Pointer<Int64> valuePtr,
+);
+
+// Int32 overload of `CFNumberGetValue` — used for `CTFontSymbolicTraits`,
+// which CoreText stores as a `uint32_t` inside the traits dictionary.
+typedef _CFNumberGetValueInt32Native = Uint8 Function(
+  CFTypeRef number,
+  IntPtr type,
+  Pointer<Int32> valuePtr,
+);
+typedef _CFNumberGetValueInt32Dart = int Function(
+  CFTypeRef number,
+  int type,
+  Pointer<Int32> valuePtr,
+);
+
+typedef _CFURLGetFileSystemRepresentationNative = Uint8 Function(
+  CFTypeRef url,
+  Uint8 resolveAgainstBase,
+  Pointer<Uint8> buffer,
+  IntPtr maxBufLen,
+);
+typedef _CFURLGetFileSystemRepresentationDart = int Function(
+  CFTypeRef url,
+  int resolveAgainstBase,
+  Pointer<Uint8> buffer,
+  int maxBufLen,
 );
 
 // --- CoreText function typedefs ---
@@ -207,6 +275,8 @@ class MacFontBindings {
   final _CFStringGetCStringDart _cfStringGetCString;
   final _CFNumberGetValueDart _cfNumberGetValue;
   final _CFNumberGetValueInt64Dart _cfNumberGetValueInt64;
+  final _CFNumberGetValueInt32Dart _cfNumberGetValueInt32;
+  final _CFURLGetFileSystemRepresentationDart _cfUrlGetFileSystemRepresentation;
 
   // CoreText
   final CTFontCollectionCreateFromAvailableFontsDart
@@ -228,6 +298,29 @@ class MacFontBindings {
   /// `CFStringRef kCTFontWeightTrait`
   final CFTypeRef kFontWeightTrait;
 
+  /// `CFStringRef kCTFontWidthTrait` — stretch in [−1.0 … 1.0].
+  final CFTypeRef kFontWidthTrait;
+
+  /// `CFStringRef kCTFontSlantTrait` — italic slant in [−1.0 … 1.0];
+  /// positive values lean right.
+  final CFTypeRef kFontSlantTrait;
+
+  /// `CFStringRef kCTFontSymbolicTrait` — `CTFontSymbolicTraits` bitmask.
+  final CFTypeRef kFontSymbolicTrait;
+
+  /// `CFStringRef kCTFontNameAttribute` — PostScript name.
+  final CFTypeRef kFontNameAttribute;
+
+  /// `CFStringRef kCTFontDisplayNameAttribute` — human-readable full name.
+  final CFTypeRef kFontDisplayNameAttribute;
+
+  /// `CFStringRef kCTFontStyleNameAttribute` — sub-family ("Regular",
+  /// "Bold Italic", …).
+  final CFTypeRef kFontStyleNameAttribute;
+
+  /// `CFStringRef kCTFontURLAttribute` — CFURLRef for the backing file.
+  final CFTypeRef kFontURLAttribute;
+
   /// Variation-axis-related symbols, or `null` if any failed to resolve
   /// (treat as "variable font support unavailable on this system").
   final VariationAxisSymbols? variationAxes;
@@ -242,6 +335,9 @@ class MacFontBindings {
     required _CFStringGetCStringDart cfStringGetCString,
     required _CFNumberGetValueDart cfNumberGetValue,
     required _CFNumberGetValueInt64Dart cfNumberGetValueInt64,
+    required _CFNumberGetValueInt32Dart cfNumberGetValueInt32,
+    required _CFURLGetFileSystemRepresentationDart
+        cfUrlGetFileSystemRepresentation,
     required this.ctFontCollectionCreateFromAvailable,
     required this.ctFontCollectionCreateMatching,
     required this.ctFontDescriptorCopyAttribute,
@@ -250,11 +346,20 @@ class MacFontBindings {
     required this.kFontFamilyNameAttribute,
     required this.kFontTraitsAttribute,
     required this.kFontWeightTrait,
+    required this.kFontWidthTrait,
+    required this.kFontSlantTrait,
+    required this.kFontSymbolicTrait,
+    required this.kFontNameAttribute,
+    required this.kFontDisplayNameAttribute,
+    required this.kFontStyleNameAttribute,
+    required this.kFontURLAttribute,
     required this.variationAxes,
   })  : _cfRelease = cfRelease,
         _cfStringGetCString = cfStringGetCString,
         _cfNumberGetValue = cfNumberGetValue,
         _cfNumberGetValueInt64 = cfNumberGetValueInt64,
+        _cfNumberGetValueInt32 = cfNumberGetValueInt32,
+        _cfUrlGetFileSystemRepresentation = cfUrlGetFileSystemRepresentation,
         _objcPoolPush = objcPoolPush,
         _objcPoolPop = objcPoolPop;
 
@@ -282,17 +387,28 @@ class MacFontBindings {
     // The extern symbol's address points to a CFStringRef variable.
     // Lookup with T=CFTypeRef gives Pointer<CFTypeRef>; .value reads the
     // variable's contents (the actual CFStringRef).
-    final famPtr = ct.lookup<CFTypeRef>('kCTFontFamilyNameAttribute');
-    final traitsPtr = ct.lookup<CFTypeRef>('kCTFontTraitsAttribute');
-    final weightPtr = ct.lookup<CFTypeRef>('kCTFontWeightTrait');
-
-    final famRef = famPtr.value;
-    final traitsRef = traitsPtr.value;
-    final weightRef = weightPtr.value;
+    final famRef = ct.lookup<CFTypeRef>('kCTFontFamilyNameAttribute').value;
+    final traitsRef = ct.lookup<CFTypeRef>('kCTFontTraitsAttribute').value;
+    final weightRef = ct.lookup<CFTypeRef>('kCTFontWeightTrait').value;
+    final widthRef = ct.lookup<CFTypeRef>('kCTFontWidthTrait').value;
+    final slantRef = ct.lookup<CFTypeRef>('kCTFontSlantTrait').value;
+    final symbolicRef = ct.lookup<CFTypeRef>('kCTFontSymbolicTrait').value;
+    final nameRef = ct.lookup<CFTypeRef>('kCTFontNameAttribute').value;
+    final displayRef =
+        ct.lookup<CFTypeRef>('kCTFontDisplayNameAttribute').value;
+    final styleRef = ct.lookup<CFTypeRef>('kCTFontStyleNameAttribute').value;
+    final urlRef = ct.lookup<CFTypeRef>('kCTFontURLAttribute').value;
 
     if (famRef.address == 0 ||
         traitsRef.address == 0 ||
-        weightRef.address == 0) {
+        weightRef.address == 0 ||
+        widthRef.address == 0 ||
+        slantRef.address == 0 ||
+        symbolicRef.address == 0 ||
+        nameRef.address == 0 ||
+        displayRef.address == 0 ||
+        styleRef.address == 0 ||
+        urlRef.address == 0) {
       throw StateError(
         'CoreText extern CFStringRef constant resolved to null',
       );
@@ -329,6 +445,13 @@ class MacFontBindings {
               'CFNumberGetValue'),
       cfNumberGetValueInt64: cf.lookupFunction<_CFNumberGetValueInt64Native,
           _CFNumberGetValueInt64Dart>('CFNumberGetValue'),
+      cfNumberGetValueInt32: cf.lookupFunction<_CFNumberGetValueInt32Native,
+          _CFNumberGetValueInt32Dart>('CFNumberGetValue'),
+      cfUrlGetFileSystemRepresentation: cf.lookupFunction<
+          _CFURLGetFileSystemRepresentationNative,
+          _CFURLGetFileSystemRepresentationDart>(
+        'CFURLGetFileSystemRepresentation',
+      ),
       ctFontCollectionCreateFromAvailable: ct.lookupFunction<
           _CTFontCollectionCreateFromAvailableFontsNative,
           CTFontCollectionCreateFromAvailableFontsDart>(
@@ -353,6 +476,13 @@ class MacFontBindings {
       kFontFamilyNameAttribute: famRef,
       kFontTraitsAttribute: traitsRef,
       kFontWeightTrait: weightRef,
+      kFontWidthTrait: widthRef,
+      kFontSlantTrait: slantRef,
+      kFontSymbolicTrait: symbolicRef,
+      kFontNameAttribute: nameRef,
+      kFontDisplayNameAttribute: displayRef,
+      kFontStyleNameAttribute: styleRef,
+      kFontURLAttribute: urlRef,
       variationAxes: variationAxes,
     );
   }
@@ -421,6 +551,33 @@ class MacFontBindings {
     Pointer<Int64> valuePtr,
   ) =>
       _cfNumberGetValueInt64(number, type, valuePtr);
+
+  /// Calls `CFNumberGetValue` with a 32-bit integer out-pointer, returning 0/1.
+  /// Used for `CTFontSymbolicTraits` (uint32 bitmask).
+  int cfNumberGetValueInt32(
+    CFTypeRef number,
+    int type,
+    Pointer<Int32> valuePtr,
+  ) =>
+      _cfNumberGetValueInt32(number, type, valuePtr);
+
+  /// Calls `CFURLGetFileSystemRepresentation`, returning 0/1.
+  ///
+  /// Writes the URL's native filesystem path (UTF-8, no NUL terminator) into
+  /// [buffer]. `resolveAgainstBase` = 1 is correct for absolute file-URLs
+  /// returned by CoreText; it also works for relative ones by resolving.
+  int cfUrlGetFileSystemRepresentation(
+    CFTypeRef url,
+    int resolveAgainstBase,
+    Pointer<Uint8> buffer,
+    int maxBufLen,
+  ) =>
+      _cfUrlGetFileSystemRepresentation(
+        url,
+        resolveAgainstBase,
+        buffer,
+        maxBufLen,
+      );
 
   /// Runs [body] inside an Objective-C autorelease pool.
   ///

@@ -30,10 +30,76 @@ const int kMaxFontCount = 1000;
 /// is the byte-reverse of the macOS/OpenType big-endian convention.
 const int kDWriteFontAxisTagWeight = 0x74686777;
 
+/// `DWRITE_FONT_AXIS_TAG_WIDTH` — `'wdth'` little-endian.
+const int kDWriteFontAxisTagWidth = 0x68746477;
+
+/// `DWRITE_FONT_AXIS_TAG_SLANT` — `'slnt'` little-endian.
+/// `slnt` values are typically negative degrees (e.g. −20.0 … 0.0).
+const int kDWriteFontAxisTagSlant = 0x746e6c73;
+
+/// `DWRITE_FONT_AXIS_TAG_ITALIC` — `'ital'` little-endian.
+/// `ital` is a boolean axis: declared range is usually 0.0 or 1.0.
+const int kDWriteFontAxisTagItalic = 0x6c617469;
+
+/// `DWRITE_FONT_AXIS_TAG_OPTICAL_SIZE` — `'opsz'` little-endian.
+/// `opsz` values are in points (e.g. 8.0 … 144.0).
+const int kDWriteFontAxisTagOpticalSize = 0x7a73706f;
+
 /// Sanity cap on `IDWriteFontResource::GetFontAxisCount` — variable fonts
 /// in the wild use 1–6 axes (`wght`, `wdth`, `slnt`, `ital`, `opsz`,
 /// occasionally one custom). 64 leaves headroom for malformed fonts.
 const int kMaxFontAxisCount = 64;
+
+/// Maximum reasonable Windows path length. MAX_PATH is 260 but long-path
+/// aware systems go up to 32 767; 32 768 caps ludicrous values.
+const int kMaxFontPathLength = 32768;
+
+/// Sanity cap on `IDWriteFontFace::GetFiles` file count. A single face is
+/// backed by 1 file in >99% of cases; pfb/pfm pairs report 2. 8 is ample.
+const int kMaxFilesPerFace = 8;
+
+// --- DWRITE_INFORMATIONAL_STRING_ID values ---
+// Enum values auto-incremented from 0 in dwrite.h. Values verified against
+// <https://learn.microsoft.com/en-us/windows/win32/api/dwrite/ne-dwrite-dwrite_informational_string_id>.
+//
+//  0 NONE
+//  1 COPYRIGHT_NOTICE
+//  2 VERSION_STRINGS
+//  3 TRADEMARK
+//  4 MANUFACTURER
+//  5 DESIGNER
+//  6 DESIGNER_URL
+//  7 DESCRIPTION
+//  8 FONT_VENDOR_URL
+//  9 LICENSE_DESCRIPTION
+// 10 LICENSE_INFO_URL
+// 11 WIN32_FAMILY_NAMES
+// 12 WIN32_SUBFAMILY_NAMES
+// 13 TYPOGRAPHIC_FAMILY_NAMES
+// 14 TYPOGRAPHIC_SUBFAMILY_NAMES
+// 15 SAMPLE_TEXT
+// 16 FULL_NAME
+// 17 POSTSCRIPT_NAME
+// 18 POSTSCRIPT_CID_NAME
+
+/// `DWRITE_INFORMATIONAL_STRING_FULL_NAME`
+const int kDWriteInfoStringFullName = 16;
+
+/// `DWRITE_INFORMATIONAL_STRING_POSTSCRIPT_NAME`
+const int kDWriteInfoStringPostScriptName = 17;
+
+// --- DWRITE_FONT_STYLE values ---
+// NOTE: Oblique (1) comes BEFORE Italic (2) in DirectWrite's enum —
+// opposite of most libraries. Verify mapping.
+
+/// `DWRITE_FONT_STYLE_NORMAL` = 0
+const int kDWriteFontStyleNormal = 0;
+
+/// `DWRITE_FONT_STYLE_OBLIQUE` = 1
+const int kDWriteFontStyleOblique = 1;
+
+/// `DWRITE_FONT_STYLE_ITALIC` = 2
+const int kDWriteFontStyleItalic = 2;
 
 // --- GUIDs ---
 
@@ -78,6 +144,49 @@ Pointer<GUID> allocIIDWriteFactory(Arena arena) {
   guid.ref.data4_5 = 0x93;
   guid.ref.data4_6 = 0xdb;
   guid.ref.data4_7 = 0x48;
+  return guid;
+}
+
+/// Allocates and fills IID_IDWriteFont1:
+/// {acd16696-8c14-4f5d-877e-fe3fc1d32738}
+///
+/// `IDWriteFont1` (Windows 8+, dwrite_1.h) adds `IsMonospacedFont`,
+/// `GetPanose`, `GetUnicodeRanges`, and an overloaded `GetMetrics`.
+/// `QueryInterface` failure on older builds is treated as "not monospace".
+Pointer<GUID> allocIIDWriteFont1(Arena arena) {
+  final guid = arena<GUID>();
+  guid.ref.data1 = 0xacd16696;
+  guid.ref.data2 = 0x8c14;
+  guid.ref.data3 = 0x4f5d;
+  guid.ref.data4_0 = 0x87;
+  guid.ref.data4_1 = 0x7e;
+  guid.ref.data4_2 = 0xfe;
+  guid.ref.data4_3 = 0x3f;
+  guid.ref.data4_4 = 0xc1;
+  guid.ref.data4_5 = 0xd3;
+  guid.ref.data4_6 = 0x27;
+  guid.ref.data4_7 = 0x38;
+  return guid;
+}
+
+/// Allocates and fills IID_IDWriteLocalFontFileLoader:
+/// {b2d9f3ec-c9fe-4a22-a2f5-4e3e96a3d196}
+///
+/// System-installed fonts are always backed by this loader; memory-loaded
+/// or remote fonts fail `QueryInterface` and return no file path.
+Pointer<GUID> allocIIDWriteLocalFontFileLoader(Arena arena) {
+  final guid = arena<GUID>();
+  guid.ref.data1 = 0xb2d9f3ec;
+  guid.ref.data2 = 0xc9fe;
+  guid.ref.data3 = 0x4a22;
+  guid.ref.data4_0 = 0xa2;
+  guid.ref.data4_1 = 0xf5;
+  guid.ref.data4_2 = 0x4e;
+  guid.ref.data4_3 = 0x3e;
+  guid.ref.data4_4 = 0x96;
+  guid.ref.data4_5 = 0xa3;
+  guid.ref.data4_6 = 0xd1;
+  guid.ref.data4_7 = 0x96;
   return guid;
 }
 
@@ -423,6 +532,85 @@ int fontGetWeight(Pointer<IntPtr> font) {
   return fn(font);
 }
 
+/// IDWriteFont::GetStretch — vtable slot 5. Returns `DWRITE_FONT_STRETCH`
+/// (1–9; 0 = UNDEFINED for malformed fonts).
+typedef _GetStretchNative = Int32 Function(Pointer<IntPtr> self);
+typedef _GetStretchDart = int Function(Pointer<IntPtr> self);
+
+int fontGetStretch(Pointer<IntPtr> font) {
+  final fn =
+      vtableSlot<_GetStretchNative>(font, 5).asFunction<_GetStretchDart>();
+  return fn(font);
+}
+
+/// IDWriteFont::GetStyle — vtable slot 6. Returns `DWRITE_FONT_STYLE`
+/// (0 = Normal, 1 = Oblique, 2 = Italic).
+typedef _GetStyleNative = Int32 Function(Pointer<IntPtr> self);
+typedef _GetStyleDart = int Function(Pointer<IntPtr> self);
+
+int fontGetStyle(Pointer<IntPtr> font) {
+  final fn = vtableSlot<_GetStyleNative>(font, 6).asFunction<_GetStyleDart>();
+  return fn(font);
+}
+
+/// IDWriteFont::IsSymbolFont — vtable slot 7. Returns `BOOL`.
+typedef _IsSymbolFontNative = Int32 Function(Pointer<IntPtr> self);
+typedef _IsSymbolFontDart = int Function(Pointer<IntPtr> self);
+
+int fontIsSymbolFont(Pointer<IntPtr> font) {
+  final fn =
+      vtableSlot<_IsSymbolFontNative>(font, 7).asFunction<_IsSymbolFontDart>();
+  return fn(font);
+}
+
+/// IDWriteFont::GetFaceNames — vtable slot 8. Returns an
+/// `IDWriteLocalizedStrings*` of sub-family names ("Regular", "Bold Italic").
+typedef _GetFaceNamesNative = Int32 Function(
+  Pointer<IntPtr> self,
+  Pointer<Pointer<IntPtr>> names,
+);
+typedef _GetFaceNamesDart = int Function(
+  Pointer<IntPtr> self,
+  Pointer<Pointer<IntPtr>> names,
+);
+
+int fontGetFaceNames(
+  Pointer<IntPtr> font,
+  Pointer<Pointer<IntPtr>> outNames,
+) {
+  final fn =
+      vtableSlot<_GetFaceNamesNative>(font, 8).asFunction<_GetFaceNamesDart>();
+  return fn(font, outNames);
+}
+
+/// IDWriteFont::GetInformationalStrings — vtable slot 9.
+///
+/// `exists` out parameter may be `FALSE` with a success HRESULT when the
+/// requested string id is absent from the font — caller must check both.
+typedef _GetInformationalStringsNative = Int32 Function(
+  Pointer<IntPtr> self,
+  Int32 informationalStringID,
+  Pointer<Pointer<IntPtr>> informationalStrings,
+  Pointer<Int32> exists,
+);
+typedef _GetInformationalStringsDart = int Function(
+  Pointer<IntPtr> self,
+  int informationalStringID,
+  Pointer<Pointer<IntPtr>> informationalStrings,
+  Pointer<Int32> exists,
+);
+
+int fontGetInformationalStrings(
+  Pointer<IntPtr> font,
+  int informationalStringID,
+  Pointer<Pointer<IntPtr>> outStrings,
+  Pointer<Int32> outExists,
+) {
+  final fn = vtableSlot<_GetInformationalStringsNative>(font, 9)
+      .asFunction<_GetInformationalStringsDart>();
+  return fn(font, informationalStringID, outStrings, outExists);
+}
+
 /// IDWriteFont::CreateFontFace — vtable slot 13
 ///
 /// Returns an `IDWriteFontFace` that can be `QueryInterface`'d for
@@ -443,6 +631,169 @@ int fontCreateFontFace(
   final fn = vtableSlot<_CreateFontFaceNative>(font, 13)
       .asFunction<_CreateFontFaceDart>();
   return fn(font, outFontFace);
+}
+
+// --- IDWriteFont1 vtable (Windows 8+, dwrite_1.h) ---
+// Inherits IDWriteFont (14 slots [0-13]). Adds:
+//  [14] GetMetrics                — DWRITE_FONT_METRICS1 overload
+//  [15] GetPanose
+//  [16] GetUnicodeRanges
+//  [17] IsMonospacedFont          — BOOL
+
+/// IDWriteFont1::IsMonospacedFont — vtable slot 17.
+typedef _IsMonospacedFontNative = Int32 Function(Pointer<IntPtr> self);
+typedef _IsMonospacedFontDart = int Function(Pointer<IntPtr> self);
+
+int font1IsMonospacedFont(Pointer<IntPtr> font1) {
+  final fn = vtableSlot<_IsMonospacedFontNative>(font1, 17)
+      .asFunction<_IsMonospacedFontDart>();
+  return fn(font1);
+}
+
+// --- IDWriteFontFace vtable ---
+// Verified against dwrite.h.
+// IUnknown (3) +
+//  [3] GetType
+//  [4] GetFiles                   — HRESULT (UINT32*, IDWriteFontFile**)
+//  [5] GetIndex
+//  [6] GetSimulations
+//  [7] IsSymbolFont
+//  [8] GetMetrics
+//  ...
+
+/// IDWriteFontFace::GetFiles — vtable slot 4.
+///
+/// Two-call pattern: first call with `outFiles = nullptr` fills `*numberOfFiles`
+/// with the count; second call with an allocated array of that size retrieves
+/// the [IDWriteFontFile] pointers. Each returned file must be `Release`d.
+typedef _GetFilesNative = Int32 Function(
+  Pointer<IntPtr> self,
+  Pointer<Uint32> numberOfFiles,
+  Pointer<Pointer<IntPtr>> outFiles,
+);
+typedef _GetFilesDart = int Function(
+  Pointer<IntPtr> self,
+  Pointer<Uint32> numberOfFiles,
+  Pointer<Pointer<IntPtr>> outFiles,
+);
+
+int fontFaceGetFiles(
+  Pointer<IntPtr> face,
+  Pointer<Uint32> numberOfFiles,
+  Pointer<Pointer<IntPtr>> outFiles,
+) {
+  final fn = vtableSlot<_GetFilesNative>(face, 4).asFunction<_GetFilesDart>();
+  return fn(face, numberOfFiles, outFiles);
+}
+
+// --- IDWriteFontFile vtable ---
+// IUnknown (3) +
+//  [3] GetReferenceKey            — HRESULT (void const**, UINT32*)
+//  [4] GetLoader                  — HRESULT (IDWriteFontFileLoader**)
+//  [5] Analyze
+
+/// IDWriteFontFile::GetReferenceKey — vtable slot 3. Returns a borrowed
+/// pointer to loader-specific key bytes (do not free).
+typedef _GetReferenceKeyNative = Int32 Function(
+  Pointer<IntPtr> self,
+  Pointer<Pointer<Void>> referenceKey,
+  Pointer<Uint32> referenceKeySize,
+);
+typedef _GetReferenceKeyDart = int Function(
+  Pointer<IntPtr> self,
+  Pointer<Pointer<Void>> referenceKey,
+  Pointer<Uint32> referenceKeySize,
+);
+
+int fontFileGetReferenceKey(
+  Pointer<IntPtr> file,
+  Pointer<Pointer<Void>> outKey,
+  Pointer<Uint32> outKeySize,
+) {
+  final fn = vtableSlot<_GetReferenceKeyNative>(file, 3)
+      .asFunction<_GetReferenceKeyDart>();
+  return fn(file, outKey, outKeySize);
+}
+
+/// IDWriteFontFile::GetLoader — vtable slot 4. Returned loader must be
+/// `Release`d.
+typedef _GetLoaderNative = Int32 Function(
+  Pointer<IntPtr> self,
+  Pointer<Pointer<IntPtr>> outLoader,
+);
+typedef _GetLoaderDart = int Function(
+  Pointer<IntPtr> self,
+  Pointer<Pointer<IntPtr>> outLoader,
+);
+
+int fontFileGetLoader(
+  Pointer<IntPtr> file,
+  Pointer<Pointer<IntPtr>> outLoader,
+) {
+  final fn = vtableSlot<_GetLoaderNative>(file, 4).asFunction<_GetLoaderDart>();
+  return fn(file, outLoader);
+}
+
+// --- IDWriteLocalFontFileLoader vtable ---
+// Inherits IDWriteFontFileLoader (IUnknown + 1 slot [3] CreateStreamFromKey).
+// Adds:
+//  [4] GetFilePathLengthFromKey   — HRESULT (const void*, UINT32, UINT32*)
+//  [5] GetFilePathFromKey         — HRESULT (const void*, UINT32, WCHAR*, UINT32)
+//  [6] GetLastWriteTimeFromKey
+
+/// IDWriteLocalFontFileLoader::GetFilePathLengthFromKey — vtable slot 4.
+/// Length returned **excludes** the null terminator.
+typedef _GetFilePathLengthFromKeyNative = Int32 Function(
+  Pointer<IntPtr> self,
+  Pointer<Void> referenceKey,
+  Uint32 referenceKeySize,
+  Pointer<Uint32> outLength,
+);
+typedef _GetFilePathLengthFromKeyDart = int Function(
+  Pointer<IntPtr> self,
+  Pointer<Void> referenceKey,
+  int referenceKeySize,
+  Pointer<Uint32> outLength,
+);
+
+int localLoaderGetFilePathLengthFromKey(
+  Pointer<IntPtr> loader,
+  Pointer<Void> key,
+  int keySize,
+  Pointer<Uint32> outLength,
+) {
+  final fn = vtableSlot<_GetFilePathLengthFromKeyNative>(loader, 4)
+      .asFunction<_GetFilePathLengthFromKeyDart>();
+  return fn(loader, key, keySize, outLength);
+}
+
+/// IDWriteLocalFontFileLoader::GetFilePathFromKey — vtable slot 5.
+/// `filePathSize` must include room for the null terminator.
+typedef _GetFilePathFromKeyNative = Int32 Function(
+  Pointer<IntPtr> self,
+  Pointer<Void> referenceKey,
+  Uint32 referenceKeySize,
+  Pointer<Utf16> filePath,
+  Uint32 filePathSize,
+);
+typedef _GetFilePathFromKeyDart = int Function(
+  Pointer<IntPtr> self,
+  Pointer<Void> referenceKey,
+  int referenceKeySize,
+  Pointer<Utf16> filePath,
+  int filePathSize,
+);
+
+int localLoaderGetFilePathFromKey(
+  Pointer<IntPtr> loader,
+  Pointer<Void> key,
+  int keySize,
+  Pointer<Utf16> buffer,
+  int bufferSize,
+) {
+  final fn = vtableSlot<_GetFilePathFromKeyNative>(loader, 5)
+      .asFunction<_GetFilePathFromKeyDart>();
+  return fn(loader, key, keySize, buffer, bufferSize);
 }
 
 // --- IDWriteFontFace5 vtable (Windows 10 1803+, dwrite_3.h) ---

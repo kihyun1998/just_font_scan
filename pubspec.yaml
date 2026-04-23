@@ -1,5 +1,5 @@
 name: just_font_scan
-description: Scan system font families and their supported weights using platform-native APIs (DirectWrite on Windows, CoreText on macOS).
+description: Scan system font families, faces, variation axes, and file paths using platform-native APIs (DirectWrite on Windows, CoreText on macOS).
 version: 0.3.0
 repository: https://github.com/kihyun1998/just_font_scan
 

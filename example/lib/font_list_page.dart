@@ -3,6 +3,15 @@ import 'package:just_font_scan/just_font_scan.dart';
 
 import 'font_family_tile.dart';
 
+bool _hasAnyAxis(FontFamily f) =>
+    f.weightAxis != null ||
+    f.widthAxis != null ||
+    f.slantAxis != null ||
+    f.italicAxis != null ||
+    f.opticalSizeAxis != null;
+
+bool _hasMonospaceFace(FontFamily f) => f.faces.any((face) => face.isMonospace);
+
 class FontListPage extends StatefulWidget {
   const FontListPage({super.key});
 
@@ -16,12 +25,11 @@ class _FontListPageState extends State<FontListPage> {
   final _searchController = TextEditingController();
   bool _loading = true;
   bool _onlyVariable = false;
+  bool _onlyMonospace = false;
 
   // One ValueNotifier per variable-font family, lazily created.
   // Lifting this out of the tile's State preserves the slider value
   // when the ListView recycles the tile as it scrolls off-screen.
-  // Updating `notifier.value` rebuilds only the VariablePreview subtree,
-  // not the entire ListView.
   final Map<String, ValueNotifier<double>> _wghtNotifiers = {};
 
   @override
@@ -53,7 +61,8 @@ class _FontListPageState extends State<FontListPage> {
     final q = _searchController.text.toLowerCase();
     setState(() {
       _filtered = _families.where((f) {
-        if (_onlyVariable && f.weightAxis == null) return false;
+        if (_onlyVariable && !_hasAnyAxis(f)) return false;
+        if (_onlyMonospace && !_hasMonospaceFace(f)) return false;
         if (q.isNotEmpty && !f.name.toLowerCase().contains(q)) return false;
         return true;
       }).toList();
@@ -69,7 +78,7 @@ class _FontListPageState extends State<FontListPage> {
 
   @override
   Widget build(BuildContext context) {
-    final vfCount = _families.where((f) => f.weightAxis != null).length;
+    final vfCount = _families.where(_hasAnyAxis).length;
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -91,28 +100,40 @@ class _FontListPageState extends State<FontListPage> {
         children: [
           Padding(
             padding: const EdgeInsets.all(12),
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: const InputDecoration(
-                      hintText: 'Search font family...',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    onChanged: (_) => _applyFilter(),
+                TextField(
+                  controller: _searchController,
+                  decoration: const InputDecoration(
+                    hintText: 'Search font family...',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                    isDense: true,
                   ),
+                  onChanged: (_) => _applyFilter(),
                 ),
-                const SizedBox(width: 12),
-                FilterChip(
-                  label: const Text('Variable only'),
-                  selected: _onlyVariable,
-                  onSelected: (v) {
-                    setState(() => _onlyVariable = v);
-                    _applyFilter();
-                  },
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    FilterChip(
+                      label: const Text('Variable only'),
+                      selected: _onlyVariable,
+                      onSelected: (v) {
+                        setState(() => _onlyVariable = v);
+                        _applyFilter();
+                      },
+                    ),
+                    FilterChip(
+                      label: const Text('Monospace only'),
+                      selected: _onlyMonospace,
+                      onSelected: (v) {
+                        setState(() => _onlyMonospace = v);
+                        _applyFilter();
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),

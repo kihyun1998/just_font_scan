@@ -9,7 +9,7 @@ import 'package:just_font_scan/just_font_scan.dart';
 /// does not.
 class VariablePreview extends StatelessWidget {
   final String fontFamily;
-  final WeightAxis axis;
+  final VariationAxis axis;
   final ValueNotifier<double> wghtNotifier;
 
   const VariablePreview({
