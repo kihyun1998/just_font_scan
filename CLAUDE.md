@@ -2,17 +2,11 @@
 
 ## Agent skills
 
-### Issue tracker
-
-Issues are tracked in GitHub Issues for `kihyun1998/just_font_scan`. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+| Before you | Read |
+|---|---|
+| file, read, label or close an issue | `docs/agents/issue-tracker.md` |
+| apply a triage role | `docs/agents/triage-labels.md` |
+| name a domain concept or contradict a recorded decision | `docs/agents/domain.md` |
 
 ## Comments
 
