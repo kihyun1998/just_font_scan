@@ -45,11 +45,6 @@ const int kDWriteFontAxisTagItalic = 0x6c617469;
 /// `opsz` values are in points (e.g. 8.0 … 144.0).
 const int kDWriteFontAxisTagOpticalSize = 0x7a73706f;
 
-/// Sanity cap on `IDWriteFontResource::GetFontAxisCount` — variable fonts
-/// in the wild use 1–6 axes (`wght`, `wdth`, `slnt`, `ital`, `opsz`,
-/// occasionally one custom). 64 leaves headroom for malformed fonts.
-const int kMaxFontAxisCount = 64;
-
 /// Maximum reasonable Windows path length. MAX_PATH is 260 but long-path
 /// aware systems go up to 32 767; 32 768 caps ludicrous values.
 const int kMaxFontPathLength = 32768;

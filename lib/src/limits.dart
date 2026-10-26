@@ -6,3 +6,6 @@ const int kMaxFontNameLength = 32767;
 
 /// Maximum sane font family count.
 const int kMaxFontFamilyCount = 10000;
+
+/// Maximum sane variation-axis count per font.
+const int kMaxFontAxisCount = 64;
