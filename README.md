@@ -16,13 +16,15 @@ Dart package to scan system font families, faces, variation axes, and file paths
 
 ## Installation
 
-Add to your `pubspec.yaml`:
+```sh
+flutter pub add just_font_scan
+```
+
+or add it to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  just_font_scan:
-    git:
-      url: https://github.com/kihyun1998/just_font_scan.git
+  just_font_scan: ^0.3.1
 ```
 
 ## API Reference
@@ -35,7 +37,7 @@ A system font family — a named group of `FontFace` entries plus any family-lev
 |----------|------|-------------|
 | `name` | `String` | Family name (e.g. `'Arial'`, `'Source Code Pro'`). |
 | `faces` | `List<FontFace>` | Individual faces belonging to this family. Always contains at least one entry when returned by the scanner. |
-| `weights` | `List<int>` | Distinct weights declared by `faces`, in ascending order. Derived getter — preserved for backward compatibility with 0.3.x. |
+| `weights` | `List<int>` | Distinct weights declared by `faces`, in ascending order. Derived getter — preserved for backward compatibility with 0.2.x. |
 | `weightAxis` | `VariationAxis?` | Continuous `wght` axis range when the family includes a variable font. `null` for static-only families. |
 | `widthAxis` | `VariationAxis?` | Continuous `wdth` axis (width). `null` when absent. |
 | `slantAxis` | `VariationAxis?` | Continuous `slnt` axis (slant in degrees, typically negative). `null` when absent. |
@@ -88,7 +90,7 @@ Continuous variation axis range for an OpenType variable font.
 | `ital` | `italicAxis` | 0.0 (upright) or 1.0 (italic) |
 | `opsz` | `opticalSizeAxis` | point size (e.g. 8 … 144) |
 
-`WeightAxis` is preserved as a `typedef` alias for `VariationAxis` so 0.3.x code keeps compiling.
+`WeightAxis` is a `typedef` alias for `VariationAxis`. Prefer `VariationAxis` in new code.
 
 ### `JustFontScan` class
 
@@ -292,6 +294,7 @@ On unsupported platforms, `scan()` returns an empty list and `weightsFor()` alwa
 ## Requirements
 
 - Dart SDK `>=3.0.0`
+- Flutter SDK `>=3.10.0` — the pubspec declares a Flutter constraint, so pub resolves this package only when run through the `flutter` tool
 - Windows 8+ (DirectWrite with `IDWriteFont1` preinstalled) — variation axes require Windows 10 1803+
 - macOS 10.13+ (CoreText preinstalled)
 
@@ -320,7 +323,6 @@ final f = FontFamily(
   ],
 );
 // f.weights still returns [400, 700].
-// WeightAxis literals keep compiling — WeightAxis is a typedef for VariationAxis.
 ```
 
 In practice, only **tests and mocks** need to construct `FontFamily` directly — real code just reads the values returned by `JustFontScan.scan()`, so most callers need no changes.
