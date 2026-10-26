@@ -228,6 +228,10 @@ class VariationAxis {
   final int max;
 
   /// Default value used when no explicit axis value is requested.
+  ///
+  /// This is the font's own default as the platform reports it, and is never
+  /// synthesised. An axis whose default cannot be read is reported as `null`
+  /// on the [FontFamily].
   final int defaultValue;
 
   /// Creates a [VariationAxis] with the given range.

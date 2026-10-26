@@ -581,7 +581,8 @@ _AxisSet _tryReadAllAxes(Pointer<IntPtr> font, Arena arena) {
 }
 
 /// Extracts the five registered axis ranges from an `IDWriteFontResource`.
-/// Any axis not declared by the font maps to `null`. Returns [_emptyAxisSet]
+/// Any axis not declared by the font, or whose default could not be read,
+/// maps to `null`. Returns [_emptyAxisSet]
 /// if the axis count is zero or the range fetch fails.
 _AxisSet _readAllAxesFromResource(
   Pointer<IntPtr> resource,
@@ -608,8 +609,8 @@ _AxisSet _readAllAxesFromResource(
   }
   if (mins.isEmpty) return _emptyAxisSet;
 
-  // Defaults come from a separate API and may differ from the axis midpoint.
-  // If the call fails, fall back to (min+max)/2 for any axis we saw.
+  // Defaults come from a separate API. An axis with no default read here
+  // maps to `null`.
   final defaults = <int, double>{};
   final defaultValues = arena<DWRITE_FONT_AXIS_VALUE>(axisCount);
   if (succeeded(
@@ -626,8 +627,8 @@ _AxisSet _readAllAxesFromResource(
   VariationAxis? build(int tag) {
     final min = mins[tag];
     final max = maxes[tag];
-    if (min == null || max == null) return null;
-    final def = defaults[tag] ?? ((min + max) / 2);
+    final def = defaults[tag];
+    if (min == null || max == null || def == null) return null;
     return VariationAxis(
       min: min.round(),
       max: max.round(),

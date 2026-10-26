@@ -1,3 +1,9 @@
+## Unreleased
+
+### Fixed
+
+- fix: on Windows, an axis whose default value cannot be read is now `null`, as on macOS, instead of reporting `(min + max) / 2` as its default.
+
 ## 0.3.0
 
 ### Breaking (vs 0.2.0)

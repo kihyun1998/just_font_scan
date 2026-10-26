@@ -10,7 +10,7 @@ Reading a family's variation axes on Windows through `IDWriteFontFace5` and `IDW
 From reading the source:
 - Axes are read from the first face that has any, then reused for the family: faces of one variable font share one resource (`_getFamilyFacesAndAxes`).
 - `QueryInterface(IDWriteFontFace5)` fails before Windows 10 1803; that and every other failure yields an empty axis set (`_tryReadAllAxes`).
-- Ranges and defaults come from separate calls. A missing default falls back to `(min + max) / 2`.
+- Ranges and defaults come from separate calls. An axis whose default was not read is `null`, as on macOS. If `GetDefaultFontAxisValues` fails, every axis of the resource is `null` (maintainer, 2026-10-26, #5).
 
 ## Code
 - `lib/src/windows/windows_font_scanner.dart` — `_AxisSet`, `_emptyAxisSet`, `_axisSetIsEmpty`, `_tryReadAllAxes`, `_readAllAxesFromResource`, `_isRegisteredAxisTag`
@@ -29,4 +29,4 @@ From reading the source:
 - [windows-face-scan](windows-face-scan.md) — runs inside its face loop.
 
 ## Known holes / open
-- A missing default falls back to the midpoint here but drops the axis on macOS ([shared-value-scales](../invariant/shared-value-scales.md)).
+**None.**
