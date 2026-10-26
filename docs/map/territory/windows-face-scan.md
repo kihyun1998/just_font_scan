@@ -14,6 +14,7 @@ From reading the source:
 - A face whose weight falls outside 1–1000 is dropped; stretch 0 (UNDEFINED) or out of range becomes 5.
 - `isMonospace` needs `IDWriteFont1`; a failed `QueryInterface` reports `false` (`_tryIsMonospace`).
 - The file path and variable axes are read per face by the two territories below.
+- The `@TestOn('windows')` integration test (`test/windows_scan_integration_test.dart`) covers scan, Arial weights and file paths, the weight range, and min ≤ default ≤ max on every `weightAxis`. It checks Segoe UI Variable's axes only where that family is installed. Shifting the `GetWeight` vtable slot by one turns Arial's weights into `[3, 5]` and fails the test (#7).
 
 ## Code
 - `lib/src/windows/windows_font_scanner.dart` — `scanFonts`, `_scanFontsWithArena`, `_createFactoryAndScan`, `_scanWithFactory`, `_scanCollection`, `_scanFamily`, `_getFamilyName`, `_getLocalizedString`, `_getFamilyFacesAndAxes`, `_buildFontFace`, `_dwriteStyleToEnum`, `_dwriteStretchToInt`, `_getFaceName`, `_getInformationalString`, `_tryIsMonospace`
@@ -33,4 +34,4 @@ From reading the source:
 - [font-model](font-model.md) — this builds the model.
 
 ## Known holes / open
-- No test runs on Windows: `test/` has a `@TestOn('mac-os')` integration test and nothing for Windows.
+**None.**
