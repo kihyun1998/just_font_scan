@@ -340,7 +340,7 @@ _AxisSet _copyAllAxes(
   VariationAxis? opticalSize;
 
   try {
-    final count = b.cfArrayGetCount(axesArray);
+    final count = b.cfArrayGetCount(axesArray).clamp(0, kMaxFontAxisCount);
     for (var i = 0; i < count; i++) {
       final axisDict = b.cfArrayGetValueAtIndex(axesArray, i); // borrowed
       if (axisDict.address == 0) continue;

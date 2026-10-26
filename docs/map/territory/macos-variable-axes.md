@@ -23,7 +23,7 @@ From reading the source:
 ## Cross-cutting invariants
 - [five-registered-axes](../invariant/five-registered-axes.md)
 - [shared-value-scales](../invariant/shared-value-scales.md)
-- [bounded-native-input](../invariant/bounded-native-input.md) — held everywhere except here.
+- [bounded-native-input](../invariant/bounded-native-input.md) — the axis count is clamped to `kMaxFontAxisCount`, shared with Windows.
 
 ## Blast radius
 - [windows-variable-axes](windows-variable-axes.md) — `_AxisSet` is a separate copy of the same record there.
@@ -31,6 +31,5 @@ From reading the source:
 - [coretext-bindings](coretext-bindings.md) — `VariationAxisSymbols` decides whether this runs at all.
 
 ## Known holes / open
-- `_copyAllAxes` iterates `cfArrayGetCount(axesArray)` with no cap ([bounded-native-input](../invariant/bounded-native-input.md)).
 - A missing default drops the axis here; Windows uses the midpoint instead.
 - Multi-axis families (SF Pro `wght` + `opsz`, New York) are not verified on a real Mac (`ROADMAP_FACE_METADATA_PHASE4.md` unchecked; maintainer, 2026-10-25).

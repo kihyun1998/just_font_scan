@@ -16,7 +16,7 @@ From reading the source:
 - Axis tags are DirectWrite `FOUR_CC` values, packed little-endian: the byte-reverse of the CoreText constants.
 
 ## Code
-- `lib/src/windows/dwrite_bindings.dart` — `succeeded`, `loadOle32`, `loadDWrite`, `_system32Path`, `_vtable`, `vtableSlot`, `comRelease`, `comQueryInterface`, `allocIIDWriteFactory`, `allocIIDWriteFont1`, `allocIIDWriteLocalFontFileLoader`, `allocIIDWriteFontFace5`, and one wrapper per method (`factoryGetSystemFontCollection` … `localizedStringsGetString`); constants `kDWriteFontWeightMin/Max`, `kMaxFontCount`, `kDWriteFontAxisTag*`, `kMaxFontAxisCount`, `kMaxFontPathLength`, `kMaxFilesPerFace`, `kDWriteInfoString*`, `kDWriteFontStyle*`
+- `lib/src/windows/dwrite_bindings.dart` — `succeeded`, `loadOle32`, `loadDWrite`, `_system32Path`, `_vtable`, `vtableSlot`, `comRelease`, `comQueryInterface`, `allocIIDWriteFactory`, `allocIIDWriteFont1`, `allocIIDWriteLocalFontFileLoader`, `allocIIDWriteFontFace5`, and one wrapper per method (`factoryGetSystemFontCollection` … `localizedStringsGetString`); constants `kDWriteFontWeightMin/Max`, `kMaxFontCount`, `kDWriteFontAxisTag*`, `kMaxFontPathLength`, `kMaxFilesPerFace`, `kDWriteInfoString*`, `kDWriteFontStyle*`
 - `test/axis_tag_test.dart` — group `DirectWrite FOUR_CC (little-endian)`
 
 ## Reference behaviour
