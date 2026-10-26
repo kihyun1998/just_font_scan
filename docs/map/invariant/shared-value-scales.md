@@ -1,7 +1,7 @@
 # Shared value scales
 
 ## The fact
-Both platforms report face values on the same integer scales: `FontFace.weight` is a CSS weight (1–1000), `FontFace.stretch` is the OpenType `usWidthClass` 1–9 (5 = normal, also the fallback), and every `VariationAxis` value is the platform float rounded to the nearest integer.
+Both platforms report face values on the same integer scales: `FontFace.weight` is a CSS weight (1–1000), `FontFace.stretch` is the OpenType `usWidthClass` 1–9 (5 = normal, also the fallback), and every `VariationAxis` value is the platform float rounded to the nearest integer. A `VariationAxis` is reported only when its min, max and default were all read. No value is synthesised, so an axis with a missing value is `null` on both platforms.
 
 ## Why it is cross-cutting
 Windows reads these natively and only range-checks them. macOS converts them from CoreText's normalised −1.0…1.0 floats. The two conversions live in different scanners and share no code; the scale itself is what the model's doc comments promise. Changing a fallback or a rounding rule on one side only makes the same font report different numbers per platform.
@@ -18,7 +18,7 @@ The same family shows different `weights` or `stretch` per platform beyond the d
 
 ## Discovery history
 - Read from the code at `a0ac921` (2026-04-23). CHANGELOG 0.3.0 states the intent of `mapStretch`: "keeping the two platforms on a shared integer scale".
-- The platforms differ on a missing axis default: Windows falls back to `(min + max) / 2`, while macOS drops the whole axis (`_readAxisRange` returns `null`). Recorded under the axis territories' known holes.
+- The platforms differed on a missing axis default: Windows fell back to `(min + max) / 2`, while macOS dropped the axis. Both now drop it (maintainer, 2026-10-26, #5). The OpenType `fvar` spec makes `defaultValue` a fixed field of every `VariationAxisRecord`, so a missing default means a failed platform read, not missing font data.
 
 ## Where it will recur
 Any function that turns a platform-reported weight, width, slant or axis value into a model field is subject to this.

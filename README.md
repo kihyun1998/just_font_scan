@@ -76,7 +76,7 @@ Continuous variation axis range for an OpenType variable font.
 |----------|------|-------------|
 | `min` | `int` | Minimum supported value (inclusive). |
 | `max` | `int` | Maximum supported value (inclusive). |
-| `defaultValue` | `int` | Default value used when no explicit axis value is requested. |
+| `defaultValue` | `int` | Default value used when no explicit axis value is requested. Always the font's own default as the platform reports it, never synthesised. |
 
 **Units depend on the axis** — see the table below. Platform-reported floats are rounded to the nearest integer.
 
@@ -153,7 +153,7 @@ The CSS weight `950` (ExtraBlack) is never produced on macOS because no public `
 
 ### Variable fonts
 
-When a family contains an OpenType variable font (`fvar` table), any of the five axis fields on `FontFamily` may be populated. Axes the font does not declare remain `null`.
+When a family contains an OpenType variable font (`fvar` table), any of the five axis fields on `FontFamily` may be populated. Axes the font does not declare remain `null`. So does an axis whose range or default the platform fails to report, on both Windows and macOS.
 
 A family can have both a continuous axis and a set of discrete named instances — the `faces` list contains the named-instance entries, and the axis fields describe the continuous range supported by the underlying variable face:
 
