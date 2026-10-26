@@ -11,7 +11,8 @@ From reading the source:
 - The package declares `platforms: windows, macos` and has no native build step: it uses only `dart:ffi` and system libraries.
 - Installation is documented as a git dependency (README, "Installation").
 - The CHANGELOG records each version with a breaking/added/fixed split; 0.3.0 carries the migration from 0.2.x.
-- `.pubignore` keeps `tool/` and some planning docs out of the published archive.
+- `.pubignore` keeps `tool/`, every root `ROADMAP*.md`, `CLAUDE.md` and `docs/` out of the published archive. The archive is the library, its tests, the example, README, CHANGELOG and LICENSE (`dart pub publish --dry-run`, #6).
+- Because the root has a `.pubignore`, `dart pub publish` ignores the root `.gitignore` (dart.dev, "Publishing packages", read 2026-10-26). Its rules, such as `/build/` and `/coverage/`, do not apply to the archive.
 - Dependabot watches the root pubspec only (`.github/dependabot.yml`): weekly, `increase-if-necessary`, PRs labelled `needs-triage`. The root lockfile is git-ignored, so a PR opens only for a release outside a caret constraint, and each one raises a floor for consumers (#3).
 - `example/` has no Dependabot entry: its only versioned dependency is `flutter_lints` (#3).
 - There is no CI workflow (`.github/workflows/` absent), so Dependabot has no `github-actions` entry.
@@ -30,5 +31,4 @@ From reading the source:
 - [scan-api](scan-api.md) and [font-model](font-model.md) — the README documents both; a change there makes the README wrong.
 
 ## Known holes / open
-- `.pubignore` lists `IMPROVEMENTS.md`, which does not exist, and omits `ROADMAP_FACE_METADATA*.md` and `ROADMAP_VARIABLE_FONTS.md`, which would ship.
 - No CI runs `dart analyze` or the tests. Tracked: #7; a workflow would also add a `github-actions` Dependabot entry.

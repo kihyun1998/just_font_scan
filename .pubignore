@@ -2,6 +2,8 @@
 tool/
 
 # Internal planning docs (not user-facing API documentation).
-ROADMAP.md
-ROADMAP_MACOS.md
-IMPROVEMENTS.md
+/ROADMAP*.md
+
+# Agent instructions and the territory map.
+/CLAUDE.md
+/docs/
