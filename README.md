@@ -104,7 +104,7 @@ Scans all system font families. Returns a list sorted alphabetically by family n
 
 - **Returns**: `List<FontFamily>` — all font families found on the system.
 - **Caching**: Results are cached after the first call. Subsequent calls return the cached list instantly.
-- **Error handling**: Returns `[]` if the platform is unsupported or a native API error occurs. Never throws.
+- **Error handling**: Returns `[]` if the platform is unsupported or a native API error occurs. Never throws. That `[]` is cached like any other result, so later calls keep returning it until `clearCache()`.
 - **Thread safety**: The cache is isolate-local. Calling `scan()` from different isolates triggers separate scans.
 
 #### `JustFontScan.clearCache()`
@@ -113,7 +113,7 @@ Scans all system font families. Returns a list sorted alphabetically by family n
 static void clearCache()
 ```
 
-Clears the cached scan result. The next `scan()` call will rescan. Use this after fonts have been installed or removed.
+Clears the cached scan result. The next `scan()` call will rescan. Use this after fonts have been installed or removed, or to retry after a scan returned `[]`.
 
 #### `JustFontScan.weightsFor()`
 

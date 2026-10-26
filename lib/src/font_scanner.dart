@@ -18,13 +18,18 @@ class JustFontScan {
 
   /// Scans system font families. Results are sorted by name.
   /// Cached after first call; use [clearCache] to reset.
+  ///
+  /// Never throws. On an unsupported platform or a fatal native failure it
+  /// returns an empty list, and that empty list is cached like any other
+  /// result.
   static List<FontFamily> scan() {
     if (_cache != null) return _cache!;
     _cache = _scan();
     return _cache!;
   }
 
-  /// Clears the cached scan result so the next [scan] call rescans the system.
+  /// Clears the cached scan result so the next [scan] call rescans the system,
+  /// including after a scan that returned an empty list.
   static void clearCache() {
     _cache = null;
   }
