@@ -15,10 +15,12 @@ From reading the source:
 - Because the root has a `.pubignore`, `dart pub publish` ignores the root `.gitignore` (dart.dev, "Publishing packages", read 2026-10-26). Its rules, such as `/build/` and `/coverage/`, do not apply to the archive.
 - Dependabot watches the root pubspec only (`.github/dependabot.yml`): weekly, `increase-if-necessary`, PRs labelled `needs-triage`. The root lockfile is git-ignored, so a PR opens only for a release outside a caret constraint, and each one raises a floor for consumers (#3).
 - `example/` has no Dependabot entry: its only versioned dependency is `flutter_lints` (#3).
-- There is no CI workflow (`.github/workflows/` absent), so Dependabot has no `github-actions` entry.
+- CI (`.github/workflows/ci.yml`) runs format, analyze and `dart test` on `windows-latest` and `macos-latest`, using a pinned Flutter SDK. Flutter is needed because pub resolves a `flutter:` environment constraint only inside the `flutter` tool (dart.dev, pubspec "Flutter SDK constraints", read 2026-10-26). Both OSes run because public-repo runners are free and macOS had no other real-machine check (maintainer, 2026-10-26, #7).
+- `example/` is resolved before analyze. Without that, root `dart analyze` on a fresh checkout reports 198 issues from `example/` (measured 2026-10-26, #7).
+- Dependabot also watches the workflow's actions: monthly, grouped.
 
 ## Code
-- `pubspec.yaml`, `CHANGELOG.md`, `README.md`, `.pubignore`, `analysis_options.yaml`, `LICENSE`, `.github/dependabot.yml`
+- `pubspec.yaml`, `CHANGELOG.md`, `README.md`, `.pubignore`, `analysis_options.yaml`, `LICENSE`, `.github/dependabot.yml`, `.github/workflows/ci.yml`
 
 ## Reference behaviour
 **None.**
@@ -31,4 +33,4 @@ From reading the source:
 - [scan-api](scan-api.md) and [font-model](font-model.md) — the README documents both; a change there makes the README wrong.
 
 ## Known holes / open
-- No CI runs `dart analyze` or the tests. Tracked: #7; a workflow would also add a `github-actions` Dependabot entry.
+- Dependabot does not bump `FLUTTER_VERSION` in the workflow. It is raised by hand.

@@ -20,7 +20,7 @@ The territory map. A comment's why, trap and measured value go to a note here. N
 
 ## The shape of the repo
 
-A pure `dart:ffi` package with two independent platform backends behind one static facade. Each backend is a bindings file plus a scanner, and the two share no code beyond the model and `lib/src/limits.dart`. That is why most cross-platform facts are invariants: each one is written out once per backend. The largest gap is verification. No test runs on Windows, and the macOS face metadata and axes have not been checked on a real Mac since 0.3.0 (maintainer, 2026-10-25).
+A pure `dart:ffi` package with two independent platform backends behind one static facade. Each backend is a bindings file plus a scanner, and the two share no code beyond the model and `lib/src/limits.dart`. That is why most cross-platform facts are invariants: each one is written out once per backend. CI runs both backends on real machines (#7). The macOS integration test checks family-level facts: weights, order and `weightAxis`. The largest remaining gap is that face metadata and multi-axis families on macOS have no test (maintainer, 2026-10-25; CI scope read 2026-10-26).
 
 ## Territories
 
