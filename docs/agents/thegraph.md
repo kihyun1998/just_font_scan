@@ -12,3 +12,7 @@ A pure `dart:ffi` package that scans system font families, faces, variation axes
 | Microsoft Learn DirectWrite docs | how it works | the published docs: **summarized** | binding |
 | Apple CoreText (`CTFont`, `CTFontDescriptor`, `NSFontWeight`) | how it works | SDK headers: raw; developer.apple.com: **summarized** | binding |
 | OpenType spec (1.8+ variable fonts) | how it works: axis tags and ranges | the published spec: **summarized** | binding |
+
+## Release
+
+`pub-ready`
