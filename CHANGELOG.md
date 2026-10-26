@@ -1,8 +1,14 @@
-## Unreleased
+## 0.3.1
 
 ### Fixed
 
 - fix: on Windows, an axis whose default value cannot be read is now `null`, as on macOS, instead of reporting `(min + max) / 2` as its default.
+- fix: macOS now reads at most 64 variation axes per font (`kMaxFontAxisCount`), the cap Windows already applied. A font declaring more keeps its first 64 on macOS; Windows drops all of its axes.
+
+### Docs
+
+- docs: `scan()` and `clearCache()` state that a failed scan's empty list is cached until `clearCache()`.
+- docs: README installs from pub.dev, states the Flutter SDK requirement, and corrects stale version references.
 
 ## 0.3.0
 

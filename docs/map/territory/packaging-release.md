@@ -9,7 +9,7 @@ How the package ships: `pubspec.yaml` (version, platforms, constraints, the one 
 ## Design model
 From reading the source:
 - The package declares `platforms: windows, macos` and has no native build step: it uses only `dart:ffi` and system libraries.
-- Installation is documented as a git dependency (README, "Installation").
+- Installation is documented as a pub.dev dependency (README, "Installation"), with the caret pinned to the current version, so a release bumps that line too. The README's Requirements state the Flutter SDK floor because the pubspec's `flutter:` constraint means a standalone Dart SDK cannot resolve the package (dart.dev, pubspec "Flutter SDK constraints", read 2026-10-26).
 - The CHANGELOG records each version with a breaking/added/fixed split; 0.3.0 carries the migration from 0.2.x.
 - `.pubignore` keeps `tool/`, every root `ROADMAP*.md`, `CLAUDE.md` and `docs/` out of the published archive. The archive is the library, its tests, the example, README, CHANGELOG and LICENSE (`dart pub publish --dry-run`, #6).
 - Because the root has a `.pubignore`, `dart pub publish` ignores the root `.gitignore` (dart.dev, "Publishing packages", read 2026-10-26). Its rules, such as `/build/` and `/coverage/`, do not apply to the archive.
