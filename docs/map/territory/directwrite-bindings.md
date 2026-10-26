@@ -34,4 +34,4 @@ From reading the source:
 - [diagnostic-tools](diagnostic-tools.md) — `tool/debug_filepath.dart` imports this file directly.
 
 ## Known holes / open
-- Nothing tests a slot index; a wrong one shows only as a crash or garbage on a real Windows machine.
+- No test checks each slot index directly. The Windows integration test, run in CI on `windows-latest`, catches a wrong slot on the scan path through its results: shifting `GetWeight` by one fails it (#7). Slots whose results the test does not assert are a different case: `IsSymbolFont` (`isSymbol`), `GetInformationalStrings` (`postScriptName`) and `IsMonospacedFont` (`isMonospace`). A crash there still fails CI, because every scan runs them, but a wrong value goes unnoticed.
