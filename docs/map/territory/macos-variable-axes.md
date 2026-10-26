@@ -31,4 +31,4 @@ From reading the source:
 - [coretext-bindings](coretext-bindings.md) — `VariationAxisSymbols` decides whether this runs at all.
 
 ## Known holes / open
-- Multi-axis families (SF Pro `wght` + `opsz`, New York) are not verified on a real Mac (`ROADMAP_FACE_METADATA_PHASE4.md` unchecked; maintainer, 2026-10-25).
+- Multi-axis families (SF Pro `wght` + `opsz`, New York) are not verified on a real Mac (`ROADMAP_FACE_METADATA_PHASE4.md` unchecked; maintainer, 2026-10-25). CI's macOS integration test checks only `weightAxis` consistency (#7).

@@ -37,5 +37,5 @@ From reading the source:
 - [coretext-bindings](coretext-bindings.md) — the pool and the ownership rules are its.
 
 ## Known holes / open
-- Not verified end-to-end on a real Mac since the face metadata landed: SF Pro / Helvetica Neue faces, `/System/Library/Fonts/` paths, Menlo monospace, italic style, unique PostScript names (`ROADMAP_FACE_METADATA_PHASE3.md` unchecked; maintainer, 2026-10-25).
+- Not verified end-to-end on a real Mac since the face metadata landed: SF Pro / Helvetica Neue faces, `/System/Library/Fonts/` paths, Menlo monospace, italic style, unique PostScript names (`ROADMAP_FACE_METADATA_PHASE3.md` unchecked; maintainer, 2026-10-25). CI's macOS integration test does not cover face metadata (#7).
 - Grouping by name string can merge two distinct families that share a name, which DirectWrite would keep apart; not investigated.
